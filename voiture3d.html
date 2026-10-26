@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Pickup Minecraft — Route infinie</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #87CEEB; }
+  canvas { display: block; }
+  #info {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+    font: bold 16px/1.4 "Courier New", monospace; color: #fff;
+    text-shadow: 2px 2px 0 #3f3f3f; background: rgba(0,0,0,0.4);
+    padding: 8px 16px; border-radius: 6px; user-select: none;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div id="info">&#8593; avancer &nbsp; &#8595; freiner/reculer &nbsp; &#8592; &#8594; tourner<br>Espace : klaxon (canard) &#129414;</div>
+
+<!-- Three.js via CDN : rien à installer, il faut juste internet -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* =========================================================
+   PICKUP MINECRAFT — ÉTAPE 3
+   1. Scène, caméra, lumières
+   2. La route : surélevée avec accotements, bien
+      différenciée de l'herbe (plus de scintillement)
+   3. Décor : arbres derrière les barrières + maisons
+      de temps en temps (recréés à chaque recyclage)
+   4. La voiture (pickup + creeper en armure d'or)
+   5. Conduite : flèche gauche = tourne à gauche !
+   6. Klaxon canard
+   ========================================================= */
+
+/* ---------- 1. SCÈNE, CAMÉRA, LUMIÈRES ---------- */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB); // ciel bleu Minecraft
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 300);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+const soleil = new THREE.DirectionalLight(0xffffff, 2.0);
+soleil.position.set(5, 10, 4);
+scene.add(soleil);
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+/* =========================================================
+   2. LA ROUTE INFINIE
+   La voiture reste vers z=0, ce sont les segments de route
+   qui défilent et se recyclent devant elle.
+   Nouveautés :
+   - asphalte SURÉLEVÉ (dessus à y=0.2) : la route domine l'herbe
+   - accotements gravier de chaque côté entre route et herbe
+   - lignes blanches ÉPAISSES posées AU-DESSUS de l'asphalte
+     (finies les lignes fines coplanaires qui scintillaient)
+   ========================================================= */
+const CONFIG = {
+  largeurRoute: 10,
+  longueurSegment: 20,
+  nbSegments: 8,
+  vitesseMax: 0.55,
+  acceleration: 0.012,
+  freinage: 0.03,
+  ralentissement: 0.005,
+  vitesseLaterale: 0.22,
+};
+
+const HAUTEUR_ROUTE = 0.2;      // hauteur du dessus de l'asphalte
+const COULEUR_ROUTE = 0x3F3F46; // asphalte gris très foncé
+const COULEUR_LIGNE = 0xE0E0E0; // lignes blanches (pas trop criardes)
+const COULEUR_ACCOT = 0x8F8770; // accotement gravier gris-tan
+
+let distance = 0;
+let vitesse = 0;
+let lateral = 0;
+
+function bloc(largeur, hauteur, profondeur, couleur, x, y, z) {
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(largeur, hauteur, profondeur),
+    new THREE.MeshLambertMaterial({ color: couleur })
+  );
+  mesh.position.set(x, y, z);
+  return mesh;
+}
+
+/* ---------- Sol d'herbe géant ---------- */
+const sol = new THREE.Mesh(
+  new THREE.BoxGeometry(80, 1, 400),
+  [
+    new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
+    new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
+    new THREE.MeshLambertMaterial({ color: 0x7CBD56 }), // herbe dessus
+    new THREE.MeshLambertMaterial({ color: 0x6E4419 }),
+    new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
+    new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
+  ]
+);
+sol.position.set(0, -0.5, -150);
+scene.add(sol);
+
+/* =========================================================
+   3. LE DÉCOR : ARBRES ET MAISONS
+   Chaque segment a un groupe "decor" rempli d'arbres
+   (derrière les barrières) et parfois d'une maison
+   (à une dizaine de mètres de la route). Quand le segment
+   est recyclé devant la voiture, on régénère le décor
+   pour que ça change en permanence.
+   ========================================================= */
+const demi = CONFIG.largeurRoute / 2;
+
+function creerArbre(x, z) {
+  const arbre = new THREE.Group();
+  // Tronc
+  arbre.add(bloc(0.7, 2.2, 0.7, 0x6E4419, 0, 1.1, 0));
+  // Feuillage style Minecraft : 2 blocs de feuilles empilés
+  const vert = [0x2E7D32, 0x388E3C, 0x43A047][Math.floor(Math.random() * 3)];
+  arbre.add(bloc(2.6, 1.0, 2.6, vert, 0, 2.7, 0));
+  arbre.add(bloc(1.8, 0.9, 1.8, vert, 0, 3.6, 0));
+  arbre.position.set(x, 0, z);
+  return arbre;
+}
+
+function creerMaison(x, z, cote) {
+  const maison = new THREE.Group();
+  const murs = [0xD7C49E, 0xCBB994, 0xDEB887][Math.floor(Math.random() * 3)];
+  // Murs
+  maison.add(bloc(4.5, 3, 4.5, murs, 0, 1.5, 0));
+  // Toit en escalier (3 marches)
+  maison.add(bloc(5.2, 0.6, 5.2, 0xB71C1C, 0, 3.3, 0));
+  maison.add(bloc(4.0, 0.6, 4.0, 0xB71C1C, 0, 3.9, 0));
+  maison.add(bloc(2.6, 0.6, 2.6, 0xB71C1C, 0, 4.5, 0));
+  // Porte + fenêtres sur la face qui regarde la route
+  const face = -cote; // la maison regarde vers la route
+  maison.add(bloc(1.0, 1.6, 0.15, 0x5D4037, 0, 0.8, face * 2.3));
+  maison.add(bloc(1.0, 1.0, 0.15, 0x81D4FA, -1.5, 1.8, face * 2.3));
+  maison.add(bloc(1.0, 1.0, 0.15, 0x81D4FA, 1.5, 1.8, face * 2.3));
+  maison.position.set(x, 0, z);
+  return maison;
+}
+
+// (Re)remplit le décor d'un segment : arbres + parfois maisons
+function remplirDecor(seg) {
+  if (seg.decor) seg.remove(seg.decor);
+  const decor = new THREE.Group();
+  const L = CONFIG.longueurSegment;
+
+  for (const cote of [-1, 1]) {
+    // 2 à 4 arbres de ce côté, derrière la barrière
+    const nbArbres = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < nbArbres; i++) {
+      const x = cote * (demi + 2 + Math.random() * 6); // entre 2 et 8 blocs derrière la barrière
+      const z = -L / 2 + Math.random() * L;
+      decor.add(creerArbre(x, z));
+    }
+    // Une maison de temps en temps (1 chance sur 4), à ~10 blocs de la route
+    if (Math.random() < 0.25) {
+      const x = cote * (demi + 10);
+      const z = -L / 2 + 3 + Math.random() * (L - 6);
+      decor.add(creerMaison(x, z, cote));
+    }
+  }
+
+  seg.add(decor);
+  seg.decor = decor;
+}
+
+/* ---------- Les segments de route ---------- */
+const segments = [];
+
+function creerSegment() {
+  const seg = new THREE.Group();
+  const L = CONFIG.longueurSegment;
+
+  // Accotements gravier (légèrement plus bas que la route)
+  seg.add(bloc(1.4, 0.22, L, COULEUR_ACCOT, -(demi + 0.7), -0.05, 0));
+  seg.add(bloc(1.4, 0.22, L, COULEUR_ACCOT, demi + 0.7, -0.05, 0));
+
+  // Asphalte surélevé : bloc de 0.3 posé sur le sol, dessus à y=0.2
+  seg.add(bloc(CONFIG.largeurRoute, 0.3, L, COULEUR_ROUTE, 0, 0.05, 0));
+
+  // Lignes blanches du bord (continues) — épaisses, posées AU-DESSUS de l'asphalte
+  seg.add(bloc(0.3, 0.06, L - 0.4, COULEUR_LIGNE, -(demi - 0.6), HAUTEUR_ROUTE + 0.03, 0));
+  seg.add(bloc(0.3, 0.06, L - 0.4, COULEUR_LIGNE, demi - 0.6, HAUTEUR_ROUTE + 0.03, 0));
+
+  // Ligne blanche en pointillés au milieu
+  for (let i = 0; i < 4; i++) {
+    seg.add(bloc(0.35, 0.06, 2.2, COULEUR_LIGNE, 0, HAUTEUR_ROUTE + 0.03, -L / 2 + 2 + i * 5));
+  }
+
+  // Barrières de chaque côté (poteaux bois + lattes blanches/rouges)
+  for (const cote of [-demi, demi]) {
+    seg.add(bloc(0.3, 0.3, L, 0xF5F5F5, cote, 1.1, 0));
+    seg.add(bloc(0.3, 0.3, L, 0xE53935, cote, 0.7, 0));
+    for (let i = 0; i < L / 5; i++) {
+      seg.add(bloc(0.5, 1.2, 0.5, 0x9B7653, cote, 0.65, -L / 2 + 2.5 + i * 5));
+    }
+  }
+
+  // Arbres + maisons de ce segment
+  remplirDecor(seg);
+
+  scene.add(seg);
+  return seg;
+}
+
+for (let i = 0; i < CONFIG.nbSegments; i++) {
+  const seg = creerSegment();
+  seg.position.z = -i * CONFIG.longueurSegment;
+  segments.push(seg);
+}
+
+/* =========================================================
+   4. LA VOITURE (pickup + creeper en armure d'or)
+   ========================================================= */
+const OR = 0xFFD54F;
+const OR_SOMBRE = 0xF9A825;
+
+function creerCreeper(x, y, z) {
+  const perso = new THREE.Group();
+  const U = 0.5;
+
+  // Tête de creeper avec visage
+  const tete = new THREE.Group();
+  tete.add(bloc(U, U, U, 0x4CAF50, 0, 0, 0));
+  tete.add(bloc(0.12, 0.12, 0.04, 0x111111, -0.12, 0.08, -U/2 - 0.01));
+  tete.add(bloc(0.12, 0.12, 0.04, 0x111111, 0.12, 0.08, -U/2 - 0.01));
+  tete.add(bloc(0.12, 0.10, 0.04, 0x111111, 0, -0.07, -U/2 - 0.01));
+  tete.add(bloc(0.12, 0.22, 0.04, 0x111111, -0.12, -0.14, -U/2 - 0.01));
+  tete.add(bloc(0.12, 0.22, 0.04, 0x111111, 0.12, -0.14, -U/2 - 0.01));
+  tete.position.set(0, U * 1.55, 0);
+  perso.add(tete);
+
+  // Torse : plastron d'or + épaulières
+  const torse = new THREE.Group();
+  torse.add(bloc(U, U * 1.2, U * 0.6, OR, 0, 0, 0));
+  torse.add(bloc(U * 0.9, U * 0.3, 0.04, OR_SOMBRE, 0, -U * 0.35, -U * 0.3 - 0.01));
+  torse.add(bloc(U * 0.5, U * 0.4, U * 0.7, OR, -U * 0.75, U * 0.45, 0));
+  torse.add(bloc(U * 0.5, U * 0.4, U * 0.7, OR, U * 0.75, U * 0.45, 0));
+  torse.position.set(0, U * 0.7, 0);
+  perso.add(torse);
+
+  // Bras dorés vers le volant
+  perso.add(bloc(U * 0.25, U * 0.25, U * 0.9, OR, -U * 0.55, U * 0.85, -U * 0.3));
+  perso.add(bloc(U * 0.25, U * 0.25, U * 0.9, OR, U * 0.55, U * 0.85, -U * 0.3));
+
+  // Jambières + bottes
+  perso.add(bloc(U * 0.35, U * 0.35, U * 0.9, OR_SOMBRE, -U * 0.25, U * 0.1, -U * 0.3));
+  perso.add(bloc(U * 0.35, U * 0.35, U * 0.9, OR_SOMBRE, U * 0.25, U * 0.1, -U * 0.3));
+  perso.add(bloc(U * 0.4, U * 0.25, U * 0.4, OR, -U * 0.25, U * 0.1, -U * 0.75));
+  perso.add(bloc(U * 0.4, U * 0.25, U * 0.4, OR, U * 0.25, U * 0.1, -U * 0.75));
+
+  perso.position.set(x, y, z);
+  return perso;
+}
+
+function creerPickup() {
+  const pickup = new THREE.Group();
+
+  // Châssis
+  pickup.add(bloc(1.8, 0.4, 4.4, 0x444444, 0, 0.35, 0));
+
+  // Cabine
+  pickup.add(bloc(1.8, 1.0, 1.6, 0xE53935, 0, 1.1, -1.2));
+  pickup.add(bloc(1.6, 0.6, 0.1, 0x81D4FA, 0, 1.4, -2.02));
+  pickup.add(bloc(0.1, 0.6, 1.4, 0x81D4FA, -0.86, 1.4, -1.2));
+  pickup.add(bloc(0.1, 0.6, 1.4, 0x81D4FA, 0.86, 1.4, -1.2));
+
+  // Capot
+  pickup.add(bloc(1.8, 0.6, 1.0, 0xE53935, 0, 0.85, -2.5));
+  pickup.add(bloc(1.6, 0.2, 0.9, 0xB71C1C, 0, 0.62, -2.5));
+
+  // Phares avant
+  pickup.add(bloc(0.4, 0.3, 0.15, 0xFFF9C4, -0.6, 0.75, -3.05));
+  pickup.add(bloc(0.4, 0.3, 0.15, 0xFFF9C4, 0.6, 0.75, -3.05));
+
+  // Benne
+  pickup.add(bloc(1.8, 0.15, 2.2, 0xB71C1C, 0, 0.65, 1.0));
+  pickup.add(bloc(1.8, 0.7, 0.15, 0xE53935, 0, 1.0, 2.1));
+  pickup.add(bloc(0.15, 0.7, 2.2, 0xE53935, -0.85, 1.0, 1.0));
+  pickup.add(bloc(0.15, 0.7, 2.2, 0xE53935, 0.85, 1.0, 1.0));
+
+  // Calandre
+  pickup.add(bloc(1.4, 0.3, 0.1, 0x9E9E9E, 0, 0.55, -3.02));
+
+  // Feux arrière rouges
+  pickup.add(bloc(0.4, 0.25, 0.12, 0xFF1744, -0.6, 1.05, 2.18));
+  pickup.add(bloc(0.4, 0.25, 0.12, 0xFF1744, 0.6, 1.05, 2.18));
+
+  // Le creeper en armure d'or au volant
+  pickup.add(creerCreeper(0, 1.0, -1.0));
+
+  // Roues
+  const positionsRoues = [
+    [-0.95, -1.5], [0.95, -1.5],
+    [-0.95, 1.4],  [0.95, 1.4],
+  ];
+  for (const [rx, rz] of positionsRoues) {
+    pickup.add(bloc(0.3, 0.9, 0.9, 0x212121, rx, 0.55, rz));
+    pickup.add(bloc(0.32, 0.4, 0.4, 0x757575, rx, 0.55, rz));
+  }
+
+  return pickup;
+}
+
+const pickup = creerPickup();
+scene.add(pickup);
+
+/* =========================================================
+   5. CLAVIER + KLAXON CANARD
+   ========================================================= */
+const touches = {};
+addEventListener('keydown', e => {
+  if (e.key.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
+  touches[e.code] = true;
+  if (e.code === 'Space') klaxonCanard();
+});
+addEventListener('keyup', e => { touches[e.code] = false; });
+
+/* --- Klaxon "coin" de canard synthétisé en WebAudio --- */
+let ctxAudio = null;
+function klaxonCanard() {
+  if (!ctxAudio) ctxAudio = new (window.AudioContext || window.webkitAudioContext)();
+  const t = ctxAudio.currentTime;
+
+  const osc = ctxAudio.createOscillator();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(250, t);
+  osc.frequency.exponentialRampToValueAtTime(600, t + 0.08);
+  osc.frequency.exponentialRampToValueAtTime(180, t + 0.25);
+
+  const filtre = ctxAudio.createBiquadFilter();
+  filtre.type = 'bandpass';
+  filtre.frequency.value = 900;
+  filtre.Q.value = 1.5;
+
+  const gain = ctxAudio.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.4, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+
+  osc.connect(filtre);
+  filtre.connect(gain);
+  gain.connect(ctxAudio.destination);
+
+  osc.start(t);
+  osc.stop(t + 0.3);
+}
+
+/* =========================================================
+   6. MISE À JOUR + BOUCLE
+   Direction corrigée : la caméra est DERRIÈRE la voiture et
+   regarde vers -z, donc gauche à l'écran = -x et droite = +x.
+   Flèche gauche -> lateral DIMINUE (vers -x), flèche droite ->
+   lateral AUGMENTE (vers +x). La voiture penche aussi
+   légèrement dans le sens du virage pour l'effet de conduite.
+   ========================================================= */
+function update() {
+  // Accélérer / freiner / ralentir
+  if (touches['ArrowUp'])   vitesse = Math.min(CONFIG.vitesseMax, vitesse + CONFIG.acceleration);
+  if (touches['ArrowDown']) vitesse = Math.max(-CONFIG.vitesseMax * 0.5, vitesse - CONFIG.freinage);
+  if (!touches['ArrowUp'] && !touches['ArrowDown']) {
+    if (vitesse > 0) vitesse = Math.max(0, vitesse - CONFIG.ralentissement);
+    if (vitesse < 0) vitesse = Math.min(0, vitesse + CONFIG.ralentissement);
+  }
+
+  // Direction corrigée : gauche = -x, droite = +x
+  const facteurVitesse = vitesse > 0 ? 1 : 0.4;
+  let direction = 0; // -1 = gauche, +1 = droite
+  if (touches['ArrowLeft'])  { lateral -= CONFIG.vitesseLaterale * facteurVitesse; direction = -1; }
+  if (touches['ArrowRight']) { lateral += CONFIG.vitesseLaterale * facteurVitesse; direction = 1; }
+  const limite = CONFIG.largeurRoute / 2 - 1.5;
+  lateral = Math.max(-limite, Math.min(limite, lateral));
+
+  // La voiture s'oriente légèrement vers où elle va
+  // (avant vers -x => rotation.y positive, d'où le signe moins)
+  const angleCible = -direction * 0.22 * facteurVitesse;
+  pickup.rotation.y += (angleCible - pickup.rotation.y) * 0.15;
+
+  // Faire défiler la route
+  distance += vitesse;
+  for (const seg of segments) {
+    seg.position.z += vitesse;
+    // Recycler : un segment derrière la voiture repart devant,
+    // avec un décor tout neuf (autres arbres, autre maison)
+    if (seg.position.z > CONFIG.longueurSegment) {
+      seg.position.z -= CONFIG.nbSegments * CONFIG.longueurSegment;
+      remplirDecor(seg);
+    }
+  }
+
+  // Positionner la voiture (elle reste vers z=0, la route défile)
+  pickup.position.set(lateral, HAUTEUR_ROUTE, 4);
+
+  // Caméra de poursuite
+  const cible = new THREE.Vector3(lateral, 1.5, 4);
+  camera.position.lerp(new THREE.Vector3(lateral * 0.6, 4.5, 13), 0.08);
+  camera.lookAt(cible);
+}
+
+function animer() {
+  requestAnimationFrame(animer);
+  update();
+  renderer.render(scene, camera);
+}
+animer();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
