@@ -27,6 +27,12 @@
     padding: 8px 16px; border-radius: 6px; user-select: none;
     text-align: center;
   }
+  #fps {
+    position: fixed; bottom: 12px; left: 14px;
+    font: bold 14px/1.4 "Courier New", monospace; color: #fff;
+    text-shadow: 2px 2px 0 #3f3f3f; background: rgba(0,0,0,0.4);
+    padding: 4px 10px; border-radius: 6px; user-select: none;
+  }
 </style>
 </head>
 <body>
@@ -36,6 +42,7 @@
 </div>
 <div id="chrono">TOUR : 00:00:00
 MEILLEUR : 00:00:00</div>
+<div id="fps">-- FPS</div>
 <div id="info">&#8593; avancer &nbsp; &#8595; freiner/reculer &nbsp; &#8592; &#8594; tourner<br>Espace : klaxon (canard) &#129414;</div>
 
 <!-- Three.js via CDN : rien à installer, il faut juste internet -->
@@ -72,7 +79,9 @@ scene.fog = new THREE.Fog(0x87CEEB, 90, 190);  // brume au loin
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 400);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(devicePixelRatio);
+// P4 : on limite la densité de pixels (sur écran Retina/4K, le rendu
+// coûte 4x plus cher — 1.5 est un bon compromis netteté/perf)
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 document.body.appendChild(renderer.domElement);
 
 const soleil = new THREE.DirectionalLight(0xffffff, 2.0);
@@ -134,7 +143,10 @@ const courbe = new THREE.CatmullRomCurve3(
 );
 
 /* --- On échantillonne la courbe pour connaître la piste --- */
-const NB_ECHANTILLONS = 700;
+// P3 : nombre de pavés de la route. 280 suffit largement (le pas
+// entre deux pavés reste court), ça divise par ~2.5 le nombre de
+// meshes par rapport aux 700 d'origine → gros gain de FPS.
+const NB_ECHANTILLONS = 280;
 const echantillons = [];
 const tangentes = [];
 for (let i = 0; i < NB_ECHANTILLONS; i++) {
@@ -192,14 +204,14 @@ for (let i = 0; i < NB_ECHANTILLONS; i++) {
   }
 
   // Pointillés au milieu (1 pavé sur 3)
-  if (i % 3 === 0) {
+  if (i % 2 === 0) { // pointillés : 1 pavé sur 2 (avec 280 échantillons)
     const milieu = bloc(0.35, 0.06, 1.2, COULEUR_LIGNE, p.x, HAUTEUR_ROUTE + 0.03, p.z);
     milieu.rotation.y = angle;
     groupeRoute.add(milieu);
   }
 
   // Barrières bois de chaque côté (1 pavé sur 4)
-  if (i % 4 === 0) {
+  if (i % 3 === 0) { // barrières : 1 pavé sur 3 (avec 280 échantillons)
     for (const cote of [-1, 1]) {
       const bx = p.x + Math.cos(angle) * demi * cote;
       const bz = p.z - Math.sin(angle) * demi * cote;
@@ -427,7 +439,7 @@ function creerDiamant(x, y, z) {
 }
 
 // Un diamant tous les ~60 pas, au milieu de la piste
-for (let i = 0; i < NB_ECHANTILLONS; i += 60) {
+for (let i = 0; i < NB_ECHANTILLONS; i += 24) { // un diamant tous les ~24 pavés (~12 diamants par tour)
   const p = echantillons[i];
   creerDiamant(p.x, 1.4, p.z);
 }
@@ -604,10 +616,31 @@ function update() {
   camera.lookAt(cibleCam);
 }
 
+/* ---------- COMPTEUR FPS (bas à gauche) ----------
+   Moyenne glissante sur ~500 ms pour un chiffre stable.
+   Affiche aussi le nombre de draw calls (renderer.info),
+   utile pour comprendre d'où viennent les ralentissements. */
+const fpsElt = document.getElementById('fps');
+let fpsFrames = 0;
+let fpsDerniereMesure = performance.now();
+
+function mesurerFPS() {
+  fpsFrames++;
+  const maintenant = performance.now();
+  if (maintenant - fpsDerniereMesure >= 500) {
+    const fps = Math.round((fpsFrames * 1000) / (maintenant - fpsDerniereMesure));
+    const drawCalls = renderer.info.render.calls;
+    fpsElt.textContent = fps + ' FPS | ' + drawCalls + ' draws';
+    fpsFrames = 0;
+    fpsDerniereMesure = maintenant;
+  }
+}
+
 function animer() {
   requestAnimationFrame(animer);
   update();
   renderer.render(scene, camera);
+  mesurerFPS();
 }
 animer();
 
