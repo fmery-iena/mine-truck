@@ -404,6 +404,40 @@ function distanceALaPiste(x, z) {
   return Math.sqrt(min);
 }
 
+/* ---------- HERBE DÉTAILLÉE HORS PISTE ----------
+   Des touffes low-poly semées partout SAUF sur la piste :
+   le joueur voit d'un coup d'œil que l'herbe « broussailleuse »
+   est la zone qui ralentit, par opposition à la route lisse.
+   Purement visuel : pas d'ombre portée (castShadow off) pour
+   rester performant, mais elles reçoivent les ombres. */
+const COULEURS_TOUFFE = [0x6B9E47, 0x8BC34A];
+const NB_TOUFFES = 550; // densité : à ajuster si perf
+
+for (let i = 0; i < NB_TOUFFES; i++) {
+  const x = 3 + (Math.random() - 0.5) * 175;
+  const z = -2 + (Math.random() - 0.5) * 175;
+  // pas d'herbe sur la piste ni juste à côté (zone roulable nette)
+  if (distanceALaPiste(x, z) < demi + 2.5) continue;
+
+  const touffe = new THREE.Group();
+  const nBrins = 1 + Math.floor(Math.random() * 3); // 1 à 3 brins
+  for (let b = 0; b < nBrins; b++) {
+    const couleur = COULEURS_TOUFFE[Math.floor(Math.random() * COULEURS_TOUFFE.length)];
+    const hauteur = 0.3 + Math.random() * 0.35;
+    const brin = bloc(0.15, hauteur, 0.15, couleur,
+      (Math.random() - 0.5) * 0.8, hauteur / 2, (Math.random() - 0.5) * 0.8);
+    brin.rotation.y = Math.random() * Math.PI;
+    touffe.add(brin);
+  }
+  // parfois une mini-fleur pour la vie
+  if (Math.random() < 0.12) {
+    touffe.add(bloc(0.2, 0.2, 0.2, Math.random() < 0.5 ? 0xFFF9C4 : 0xFFCDD2,
+      0, 0.45, 0));
+  }
+  touffe.position.set(x, 0, z);
+  scene.add(touffe);
+}
+
 /* Remplit la prairie : arbres, maisons, vaches */
 for (let essai = 0; essai < 350; essai++) {
   const x = 3 + (Math.random() - 0.5) * 170;
