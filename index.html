@@ -237,7 +237,14 @@ const sol = new THREE.Mesh(
   ]
 );
 sol.position.set(3, -0.5, -2);
+sol.receiveShadow = true; // le sol accueille les ombres portées
 scene.add(sol);
+
+/* Ombres portées : seuls les objets volumineux castent (sinon
+   les ~4000 pavés explosent le coût du rendu d'ombres). */
+function activerOmbresPortees(objet) {
+  objet.traverse(enfant => { enfant.castShadow = true; });
+}
 
 /* --- Construction de la route en pavés le long de la courbe --- */
 const groupeRoute = new THREE.Group();
