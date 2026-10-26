@@ -939,10 +939,26 @@ function update() {
         voiture.vitesse *= 0.9; // on freine à peine
         meuh();
       } else {
-        // SOLIDE : repoussement + rebond amorti
-        voiture.x += nx * (distMin - d);
-        voiture.z += nz * (distMin - d);
-        voiture.vitesse *= -0.35; // léger rebond en arrière
+        // SOLIDE — APPROCHE A (glissement) :
+        // 1) on repositionne sur la surface avec une petite marge
+        //    (+0.05) pour ne pas re-collider à chaque frame
+        const poussee = distMin - d + 0.05;
+        voiture.x += nx * poussee;
+        voiture.z += nz * poussee;
+        // 2) on ne supprime que la composante de la vitesse qui
+        //    pointe VERS l'obstacle (produit scalaire avec la
+        //    normale). La composante tangentielle est conservée :
+        //    la voiture GLISSE le long du mur au lieu de rebondir.
+        const vx = Math.sin(voiture.cap) * voiture.vitesse;
+        const vz = Math.cos(voiture.cap) * voiture.vitesse;
+        const versObstacle = -(vx * nx + vz * nz); // >0 si on fonce dessus
+        if (versObstacle > 0) {
+          // retire la part qui rentre dans l'obstacle
+          const nvx = vx + nx * versObstacle;
+          const nvz = vz + nz * versObstacle;
+          // léger frottement au contact : frotter un mur coûte un peu
+          voiture.vitesse = Math.sign(voiture.vitesse) * Math.hypot(nvx, nvz) * 0.98;
+        }
       }
     }
   }
