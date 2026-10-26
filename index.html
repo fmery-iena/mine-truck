@@ -480,13 +480,17 @@ function klaxonCanard() {
    de la piste, elle ralentit dans l'herbe. Passer la
    ligne de damier = un tour de plus !
    ========================================================= */
-// Position de départ : juste après la ligne de damier
-const INDICE_DEPART = 15;
+// Position de départ : un peu AVANT la ligne de damier,
+// et on roule dans le sens INVERSE du circuit (cap =
+// tangente retournée). On démarre donc à la fin de la
+// boucle (indice proche de NB_ECHANTILLONS) : en avançant
+// à l'envers, on franchit la ligne de damier tout de suite.
+const INDICE_DEPART = NB_ECHANTILLONS - 15;
 const posDepart = echantillons[INDICE_DEPART];
 const voiture = {
   x: posDepart.x,
   z: posDepart.z,
-  cap: Math.atan2(tangentes[INDICE_DEPART].x, tangentes[INDICE_DEPART].z),
+  cap: Math.atan2(-tangentes[INDICE_DEPART].x, -tangentes[INDICE_DEPART].z), // sens inverse !
   vitesse: 0,
   surPiste: true,
   dernierIndice: INDICE_DEPART, // pour compter les tours
@@ -495,8 +499,9 @@ const voiture = {
 // Trouve le point de la piste le plus proche de la voiture
 function pointLePlusProche(x, z) {
   let min = Infinity, indice = 0;
-  // recherche locale autour du dernier indice connu (rapide)
-  for (let delta = -30; delta <= 40; delta++) {
+  // recherche locale autour du dernier indice connu (rapide,
+  // symétrique car on roule dans les deux sens)
+  for (let delta = -40; delta <= 40; delta++) {
     const i = (voiture.dernierIndice + delta + NB_ECHANTILLONS) % NB_ECHANTILLONS;
     const dx = echantillons[i].x - x;
     const dz = echantillons[i].z - z;
@@ -536,14 +541,16 @@ function update() {
     voiture.vitesse = Math.max(vitessePlafond, voiture.vitesse - 0.02);
   }
 
-  // Compteur de tours : franchir la ligne de damier
-  // (on passe de la fin de la boucle vers son début)
+  // Compteur de tours : franchir la ligne de damier.
+  // Sens inverse : on passe du début de la boucle (indices
+  // proches de 0) vers sa fin (indices proches du max)
   const ancien = update.dernierIndice ?? INDICE_DEPART;
-  if (ancien > NB_ECHANTILLONS * 0.8 && voiture.dernierIndice < NB_ECHANTILLONS * 0.2 && voiture.vitesse > 0) {
+  if (ancien < NB_ECHANTILLONS * 0.2 && voiture.dernierIndice > NB_ECHANTILLONS * 0.8 && voiture.vitesse > 0) {
     numTour++;
     tourElt.textContent = `🏁 Tour ${numTour}`;
 
-    // Chrono : le tour boucle → on mémorise le temps du
+    // Chrono : ligne franchie. La PREMIÈRE fois, on démarre
+    // le chrono du tour 1 ; ensuite on mémorise le temps du
     // tour fini et on garde le MEILLEUR
     const maintenant = performance.now();
     if (debutTour !== null) {
@@ -556,10 +563,8 @@ function update() {
     debutTour = maintenant; // nouveau tour : le chrono repart
   }
 
-  // Affichage du chrono (démarre dès qu'on avance)
-  if (debutTour === null && voiture.vitesse > 0) {
-    debutTour = performance.now();
-  }
+  // Affichage du chrono. Avant la ligne de départ il reste
+  // à 00:00:00 : il ne démarre qu'au premier franchissement
   majChrono(debutTour === null ? 0 : performance.now() - debutTour);
   update.dernierIndice = voiture.dernierIndice;
 
