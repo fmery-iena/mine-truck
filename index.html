@@ -13,6 +13,13 @@
     text-shadow: 2px 2px 0 #3f3f3f; user-select: none; text-align: center;
   }
   #hud span { background: rgba(0,0,0,0.45); padding: 6px 14px; border-radius: 6px; }
+  #chrono {
+    position: fixed; top: 12px; right: 14px;
+    font: bold 20px/1.5 "Courier New", monospace; color: #fff;
+    text-shadow: 2px 2px 0 #3f3f3f; background: rgba(0,0,0,0.45);
+    padding: 6px 14px; border-radius: 6px; user-select: none;
+    text-align: right; white-space: pre;
+  }
   #info {
     position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
     font: bold 16px/1.4 "Courier New", monospace; color: #fff;
@@ -27,6 +34,8 @@
   <span id="score">&#128142; 0</span>
   <span id="tour">&#127937; Tour 1</span>
 </div>
+<div id="chrono">TOUR : 00:00:00
+MEILLEUR : 00:00:00</div>
 <div id="info">&#8593; avancer &nbsp; &#8595; freiner/reculer &nbsp; &#8592; &#8594; tourner<br>Espace : klaxon (canard) &#129414;</div>
 
 <!-- Three.js via CDN : rien à installer, il faut juste internet -->
@@ -379,6 +388,31 @@ let numTour = 1;
 const scoreElt = document.getElementById('score');
 const tourElt = document.getElementById('tour');
 
+/* ---------- CHRONO DE TOUR ----------
+   Le chrono démarre dès qu'on avance, puis à chaque
+   franchissement de la ligne de damier on mémorise le
+   temps du tour écoulé. Le MEILLEUR est sauvegardé dans
+   localStorage (il reste même après rechargement).
+   Format : MM:SS:CC (minutes : secondes : centièmes) */
+const chronoElt = document.getElementById('chrono');
+let debutTour = null; // timestamp du début du tour en cours
+let meilleurTour = parseFloat(localStorage.getItem('meilleurTour')) || null;
+
+function formaterTemps(ms) {
+  if (ms == null) return '00:00:00';
+  const minutes = Math.floor(ms / 60000);
+  const secondes = Math.floor((ms % 60000) / 1000);
+  const centiemes = Math.floor((ms % 1000) / 10);
+  const p = n => String(n).padStart(2, '0');
+  return p(minutes) + ':' + p(secondes) + ':' + p(centiemes);
+}
+
+function majChrono(ms) {
+  chronoElt.textContent = 'TOUR : ' + formaterTemps(ms)
+    + '\nMEILLEUR : ' + formaterTemps(meilleurTour);
+}
+majChrono(null);
+
 const diamants = [];
 function creerDiamant(x, y, z) {
   const g = new THREE.Group();
@@ -508,7 +542,25 @@ function update() {
   if (ancien > NB_ECHANTILLONS * 0.8 && voiture.dernierIndice < NB_ECHANTILLONS * 0.2 && voiture.vitesse > 0) {
     numTour++;
     tourElt.textContent = `🏁 Tour ${numTour}`;
+
+    // Chrono : le tour boucle → on mémorise le temps du
+    // tour fini et on garde le MEILLEUR
+    const maintenant = performance.now();
+    if (debutTour !== null) {
+      const duree = maintenant - debutTour;
+      if (meilleurTour === null || duree < meilleurTour) {
+        meilleurTour = duree;
+        localStorage.setItem('meilleurTour', String(duree));
+      }
+    }
+    debutTour = maintenant; // nouveau tour : le chrono repart
   }
+
+  // Affichage du chrono (démarre dès qu'on avance)
+  if (debutTour === null && voiture.vitesse > 0) {
+    debutTour = performance.now();
+  }
+  majChrono(debutTour === null ? 0 : performance.now() - debutTour);
   update.dernierIndice = voiture.dernierIndice;
 
 
