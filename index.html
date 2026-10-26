@@ -365,8 +365,18 @@ function creerMaison(x, z, ry) {
 function creerVache(x, z) {
   const vache = new THREE.Group();
   vache.add(bloc(1.4, 1.0, 2.4, 0xF5F5F5, 0, 1.3, 0));          // corps
-  vache.add(bloc(0.6, 0.5, 0.6, 0x37474F, -0.45, 1.5, 0.3));    // tache
-  vache.add(bloc(0.6, 0.5, 0.6, 0x37474F, 0.4, 1.2, -0.6));    // tache
+  // Taches noires : fines plaques POSÉES SUR la peau (flancs,
+  // dos, arrière-train), en nombre suffisant pour un pelage
+  // bien tacheté — et légèrement en relief (±0.02) pour éviter
+  // tout scintillement de surface coplanaire.
+  const NOIR = 0x37474F;
+  vache.add(bloc(0.06, 0.55, 0.9, NOIR, -0.72, 1.35, 0.3));   // flanc gauche
+  vache.add(bloc(0.06, 0.4, 0.7, NOIR, -0.72, 1.15, -0.6));  // flanc gauche 2
+  vache.add(bloc(0.06, 0.45, 0.8, NOIR, 0.72, 1.25, -0.4));  // flanc droit
+  vache.add(bloc(0.06, 0.35, 0.6, NOIR, 0.72, 1.45, 0.6));   // flanc droit 2
+  vache.add(bloc(0.55, 0.06, 0.85, NOIR, -0.15, 1.82, 0.35)); // dos
+  vache.add(bloc(0.4, 0.06, 0.6, NOIR, 0.3, 1.82, -0.5));    // dos 2
+  vache.add(bloc(0.65, 0.55, 0.06, NOIR, 0.2, 1.4, 1.22));   // arrière-train
   vache.add(bloc(0.8, 0.8, 0.7, 0xF5F5F5, 0, 1.8, -1.5));      // tête
   vache.add(bloc(0.55, 0.45, 0.1, 0xFFCDD2, 0, 1.7, -1.9));     // museau
   vache.add(bloc(0.15, 0.15, 0.3, 0x8D6E63, -0.3, 2.25, -1.5)); // corne
