@@ -158,6 +158,19 @@ const courbe = new THREE.CatmullRomCurve3(
   0.5
 );
 
+/* =========================================================
+   2bis. REGISTRE D'OBSTACLES (pour les collisions)
+   Chaque obstacle solide enregistre sa position (x, z) et
+   son rayon de collision (cercle, insensible à la rotation).
+   Types : 'solide' = repousse la voiture, 'vache' = se fait
+   pousser doucement (option A).
+   ========================================================= */
+const obstacles = [];
+
+function enregistrerObstacle(x, z, rayon, type, mesh) {
+  obstacles.push({ x, z, rayon, type, mesh });
+}
+
 /* --- On échantillonne la courbe pour connaître la piste --- */
 // P3 : nombre de pavés de la route. 280 suffit largement (le pas
 // entre deux pavés reste court), ça divise par ~2.5 le nombre de
@@ -256,19 +269,6 @@ ligneDepart.rotation.y = angleDepart;
 groupeRoute.add(ligneDepart);
 
 scene.add(groupeRoute);
-
-/* =========================================================
-   2bis. REGISTRE D'OBSTACLES (pour les collisions)
-   Chaque obstacle solide enregistre sa position (x, z) et
-   son rayon de collision (cercle, insensible à la rotation).
-   Types : 'solide' = repousse la voiture, 'vache' = se fait
-   pousser doucement (option A).
-   ========================================================= */
-const obstacles = [];
-
-function enregistrerObstacle(x, z, rayon, type, mesh) {
-  obstacles.push({ x, z, rayon, type, mesh });
-}
 
 /* =========================================================
    3. LE DÉCOR : ARBRES, MAISONS ET VACHES
