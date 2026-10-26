@@ -280,13 +280,86 @@ for (let i = 0; i < NB_ECHANTILLONS; i++) {
   tangentes.push(courbe.getTangentAt(t));
 }
 
-/* --- Sol d'herbe géant (la prairie !) --- */
+/* --- Sol d'herbe géant (la prairie !) ---
+   Le dessus n'est PLUS une couleur unie : une texture
+   pixel-art générée au démarrage (canvas 64x64, filtrage
+   Nearest → look « blocs Minecraft ») donne un motif
+   d'herbe tileable, et un noise world-space injecté dans
+   le shader teinte le sol par grandes zones (vert clair /
+   moyen / olive / doré) SANS répétition visible.
+   Tout est fait au chargement : zéro requête, zéro coût
+   par frame supplémentaire (1 mesh, 1 draw call de plus
+   qu'avant via la texture, rien d'autre). */
+const PALETTE_HERBE = [
+  0x7CBD56, // vert moyen (base)
+  0x8FCB63, // vert clair
+  0x6DA84B, // vert foncé
+  0x9BBF4E, // olive
+  0xC9D46A, // touche dorée (rare)
+];
+function creerTextureHerbe() {
+  // Grille de « blocs » : chaque pixel du canvas = 1 bloc d'herbe
+  const T = 64;
+  const cv = document.createElement('canvas');
+  cv.width = T; cv.height = T;
+  const ctx = cv.getContext('2d');
+  for (let y = 0; y < T; y++) {
+    for (let x = 0; x < T; x++) {
+      // hash pseudo-aléatoire STABLE (ne scintille pas) et tileable
+      const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+      const r = h - Math.floor(h);
+      let couleur;
+      if (r < 0.42) couleur = PALETTE_HERBE[0];      // majoritairement moyen
+      else if (r < 0.70) couleur = PALETTE_HERBE[1];   // souvent clair
+      else if (r < 0.88) couleur = PALETTE_HERBE[2];   // un peu foncé
+      else if (r < 0.97) couleur = PALETTE_HERBE[3];   // rarement olive
+      else couleur = PALETTE_HERBE[4];                // très rare doré
+      ctx.fillStyle = '#' + couleur.toString(16).padStart(6, '0');
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.magFilter = THREE.NearestFilter; // pixels nets → style blocs
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(180, 180);            // 1 bloc d'herbe = 1 unité monde
+  return tex;
+}
+const matSolDessus = new THREE.MeshLambertMaterial({ map: creerTextureHerbe() });
+// Noise world-space (sans répétition) : teinte le sol par grandes taches
+matSolDessus.onBeforeCompile = (shader) => {
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', `
+      #include <common>
+      varying vec3 vMonde;`) // position monde du fragment
+    .replace('#include <begin_vertex>', `
+      #include <begin_vertex>
+      vMonde = (modelMatrix * vec4(position, 1.0)).xyz;`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `
+      #include <common>
+      varying vec3 vMonde;
+      // hash 2D stable, sans texture
+      float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      // noise value lissé sur une GRANDE échelle (taches de ~15 blocs)
+      float bruit(vec2 p) {
+        vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash2(i), hash2(i + vec2(1, 0)), f.x),
+                   mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), f.x), f.y);
+      }`)
+    .replace('#include <color_fragment>', `
+      #include <color_fragment>
+      // Nuit de teinte world-space : mixe vers olive/doré par taches
+      float n = bruit(vMonde.xz * 0.065);
+      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.92, 0.90, 0.62), n * 0.45);
+      diffuseColor.rgb *= 0.92 + 0.16 * bruit(vMonde.xz * 0.31); // grain fin`);
+};
 const sol = new THREE.Mesh(
   new THREE.BoxGeometry(180, 1, 180),
   [
     new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
     new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
-    new THREE.MeshLambertMaterial({ color: 0x7CBD56 }), // herbe dessus
+    matSolDessus, // herbe dessus : texturée + noise
     new THREE.MeshLambertMaterial({ color: 0x6E4419 }),
     new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
     new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
@@ -462,7 +535,7 @@ function distanceALaPiste(x, z) {
    gérées par instance dans le vertex shader (onBeforeCompile) :
    chaque brin penche légèrement selon sa position et le temps.
    Pour changer la densité : modifier NB_BRINS ci-dessous. */
-const COULEURS_TOUFFE = [0x6B9E47, 0x8BC34A];
+const COULEURS_TOUFFE = [0x6B9E47, 0x8BC34A, 0x9BBF4E, 0xC9D46A];
 const NB_BRINS = 2000;        // densité de l'herbe
 const FLEURS = true;           // mini-fleurs semées par-ci par-là
 const uniformTemps = { value: 0 }; // temps écoulé, partagé avec le shader d'herbe
@@ -495,8 +568,15 @@ for (let i = 0; brins.length < NB_BRINS; i++) {
   const z = -2 + (Math.random() - 0.5) * 175;
   // pas d'herbe sur la piste ni juste à côté (zone roulable nette)
   if (distanceALaPiste(x, z) < demi + 2.5) continue;
-  const hauteur = 0.3 + Math.random() * 0.35;
-  brins.push({ x, z, hauteur, couleur: COULEURS_TOUFFE[Math.floor(Math.random() * COULEURS_TOUFFE.length)] });
+  const hauteur = 0.25 + Math.random() * 0.5;  // hauteurs très variées
+  // Teinte HSL autour du vert, parfois doré (harmonise avec le sol)
+  const couleur = new THREE.Color().setHSL(
+    0.22 + Math.random() * 0.10,               // hue : vert → vert-jaune
+    0.45 + Math.random() * 0.25,               // saturation douce
+    0.30 + Math.random() * 0.22                // luminosité variée
+  ).getHex();
+  const largeur = 0.12 + Math.random() * 0.10; // brins fins ou trapus
+  brins.push({ x, z, hauteur, couleur, largeur, inclinaison: (Math.random() - 0.5) * 0.35 });
 }
 
 const herbeInstance = new THREE.InstancedMesh(geoCube, matHerbe, brins.length);
@@ -507,8 +587,9 @@ const ech = new THREE.Vector3();
 const col = new THREE.Color();
 brins.forEach((b, i) => {
   pos.set(b.x, b.hauteur / 2, b.z);
-  q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI);
-  ech.set(0.15, b.hauteur, 0.15);
+  // rotation Y aléatoire + légère inclinaison (penché par le vent)
+  q.setFromEuler(new THREE.Euler(b.inclinaison, Math.random() * Math.PI, b.inclinaison * 0.5));
+  ech.set(b.largeur, b.hauteur, b.largeur);
   herbeInstance.setMatrixAt(i, m.compose(pos, q, ech));
   herbeInstance.setColorAt(i, col.setHex(b.couleur));
 });
