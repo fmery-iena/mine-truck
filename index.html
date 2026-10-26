@@ -113,11 +113,26 @@ const COULEUR_ROUTE = 0x3F3F46;
 const COULEUR_LIGNE = 0xE0E0E0;
 const COULEUR_ACCOT = 0x8F8770;
 
+/* ---------- P2 : géométrie et matériaux PARTAGÉS ----------
+   Avant, chaque bloc() créait sa propre BoxGeometry et son
+   propre matériau → des milliers d'objets GPU distincts.
+   Maintenant : UNE SEULE géométrie de cube unitaire (échelonnée
+   par mesh.scale) et UN matériau par couleur (mis en cache).
+   Résultat : bien moins de mémoire GPU et des draw calls
+   regroupables par le moteur. */
+const geoCube = new THREE.BoxGeometry(1, 1, 1); // LA géométrie partagée
+const cacheMatériaux = new Map();
+
+function matériauPour(couleur) {
+  if (!cacheMatériaux.has(couleur)) {
+    cacheMatériaux.set(couleur, new THREE.MeshLambertMaterial({ color: couleur }));
+  }
+  return cacheMatériaux.get(couleur);
+}
+
 function bloc(largeur, hauteur, profondeur, couleur, x, y, z) {
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(largeur, hauteur, profondeur),
-    new THREE.MeshLambertMaterial({ color: couleur })
-  );
+  const mesh = new THREE.Mesh(geoCube, matériauPour(couleur));
+  mesh.scale.set(largeur, hauteur, profondeur); // on étire le cube unitaire
   mesh.position.set(x, y, z);
   return mesh;
 }
