@@ -13,6 +13,10 @@
     text-shadow: 2px 2px 0 #3f3f3f; user-select: none; text-align: center;
   }
   #hud span { background: rgba(0,0,0,0.45); padding: 6px 14px; border-radius: 6px; }
+  #minimap {
+    position: fixed; top: 12px; left: 12px;
+    border-radius: 8px; user-select: none;
+  }
   #chrono {
     position: fixed; top: 12px; right: 14px;
     font: bold 20px/1.5 "Courier New", monospace; color: #fff;
@@ -44,6 +48,7 @@
 DERNIER : 00:00:00
 MEILLEUR : 00:00:00</div>
 <div id="fps">-- FPS</div>
+<canvas id="minimap" width="150" height="150"></canvas>
 <div id="info">&#8593; avancer &nbsp; &#8595; freiner/reculer &nbsp; &#8592; &#8594; tourner<br>Espace : klaxon (canard) &#129414;</div>
 
 <!-- Three.js via CDN : rien à installer, il faut juste internet -->
@@ -663,6 +668,72 @@ function pointLePlusProche(x, z) {
   return { indice, distance: Math.sqrt(min) };
 }
 
+/* =========================================================
+   MINI-CARTE (haut à gauche)
+   Canvas 2D : le tracé du circuit est dessiné UNE FOIS dans
+   un canvas offscreen, puis à chaque frame on ne redessine
+   que la flèche de la voiture (clear + copie du tracé +
+   triangle rouge) → coût quasi nul.
+   ========================================================= */
+const carte = document.getElementById('minimap');
+const ctxCarte = carte.getContext('2d');
+const TAILLE_CARTE = 150;
+
+// Bornes réelles du circuit pour l'échelle
+let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+for (const p of echantillons) {
+  if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+  if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
+}
+const marge = 12; // pixels entre le tracé et le bord de la carte
+const echelle = (TAILLE_CARTE - marge * 2) / Math.max(maxX - minX, maxZ - minZ);
+function versCarte(x, z) {
+  return {
+    px: marge + (x - minX) * echelle,
+    py: TAILLE_CARTE - marge - (z - minZ) * echelle, // -z vers le haut de la carte
+  };
+}
+
+// Tracé pré-dessiné (offscreen)
+const fondCarte = document.createElement('canvas');
+fondCarte.width = TAILLE_CARTE; fondCarte.height = TAILLE_CARTE;
+{
+  const c = fondCarte.getContext('2d');
+  c.fillStyle = 'rgba(0,0,0,0.45)';
+  c.fillRect(0, 0, TAILLE_CARTE, TAILLE_CARTE);
+  c.beginPath();
+  echantillons.forEach((p, i) => {
+    const { px, py } = versCarte(p.x, p.z);
+    if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+  });
+  c.closePath();
+  c.lineWidth = 5; c.strokeStyle = '#5a5a66'; c.stroke(); // piste
+  c.lineWidth = 1.5; c.strokeStyle = '#c8c8d0'; c.stroke(); // contour clair
+  // Ligne de départ : petit trait blanc sur le 1er échantillon
+  const d = echantillons[0];
+  const { px, py } = versCarte(d.x, d.z);
+  c.fillStyle = '#fff';
+  c.fillRect(px - 3, py - 3, 6, 6);
+}
+
+function majMiniCarte() {
+  ctxCarte.clearRect(0, 0, TAILLE_CARTE, TAILLE_CARTE);
+  ctxCarte.drawImage(fondCarte, 0, 0);
+  const { px, py } = versCarte(voiture.x, voiture.z);
+  ctxCarte.save();
+  ctxCarte.translate(px, py);
+  ctxCarte.rotate(-voiture.cap); // le canvas tourne horaire, le monde antihoraire
+  ctxCarte.fillStyle = '#E53935'; // rouge du pickup
+  ctxCarte.beginPath();
+  ctxCarte.moveTo(0, -6);  // pointe
+  ctxCarte.lineTo(4.5, 5);  // ailes
+  ctxCarte.lineTo(-4.5, 5);
+  ctxCarte.closePath();
+  ctxCarte.fill();
+  ctxCarte.restore();
+}
+majMiniCarte(); // premier affichage
+
 function update() {
   // Accélérer / freiner / ralentir
   if (touches['ArrowUp'])   voiture.vitesse = Math.min(CONFIG.vitesseMax, voiture.vitesse + CONFIG.acceleration);
@@ -752,6 +823,7 @@ function update() {
   // Affichage du chrono. Avant la ligne de départ il reste
   // à 00:00:00 : il ne démarre qu'au premier franchissement
   majChrono(debutTour === null ? 0 : performance.now() - debutTour);
+  majMiniCarte(); // flèche voiture sur la mini-carte
   update.dernierIndice = voiture.dernierIndice;
 
 
