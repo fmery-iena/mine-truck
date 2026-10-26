@@ -13,6 +13,14 @@
     text-shadow: 2px 2px 0 #3f3f3f; user-select: none; text-align: center;
   }
   #hud span { background: rgba(0,0,0,0.45); padding: 6px 14px; border-radius: 6px; }
+  #pause {
+    display: none;
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font: bold 26px/1.4 "Courier New", monospace; color: #fff;
+    text-shadow: 2px 2px 0 #3f3f3f; background: rgba(0,0,0,0.6);
+    padding: 16px 28px; border-radius: 10px; user-select: none;
+    text-align: center; z-index: 10;
+  }
   #minimap {
     position: fixed; top: 12px; left: 12px;
     border-radius: 8px; user-select: none;
@@ -561,7 +569,32 @@ for (let i = 0; i < NB_ECHANTILLONS; i += 24) { // un diamant tous les ~24 pavé
    5. CLAVIER + KLAXON CANARD
    ========================================================= */
 const touches = {};
+
+/* ---------- PAUSE (touche Échap) ----------
+   Le jeu se fige : plus de mise à jour, plus de chrono qui
+   tourne (on note le décalage pour ne pas fausser le tour
+   en cours). Appuyer à nouveau sur Échap reprend. */
+let enPause = false;
+let decalagePause = 0; // temps de pause à déduire du chrono
+const pauseElt = document.createElement('div');
+pauseElt.id = 'pause';
+pauseElt.textContent = '⏸ PAUSE — appuie sur Échap pour reprendre';
+document.body.appendChild(pauseElt);
+
+function basculerPause() {
+  enPause = !enPause;
+  pauseElt.style.display = enPause ? 'block' : 'none';
+  if (enPause) {
+    pauseElt.debut = performance.now();
+    // évite que la voiture reste « bloquée » sur des touches
+    for (const k in touches) touches[k] = false;
+  } else if (pauseElt.debut) {
+    decalagePause += performance.now() - pauseElt.debut;
+  }
+}
+
 addEventListener('keydown', e => {
+  if (e.key === 'Escape') { basculerPause(); return; }
   if (e.key.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
   touches[e.code] = true;
   if (e.code === 'Space') klaxonCanard();
@@ -679,20 +712,38 @@ const carte = document.getElementById('minimap');
 const ctxCarte = carte.getContext('2d');
 const TAILLE_CARTE = 150;
 
-// Bornes réelles du circuit pour l'échelle
-let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-for (const p of echantillons) {
-  if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-  if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
-}
 const marge = 12; // pixels entre le tracé et le bord de la carte
-const echelle = (TAILLE_CARTE - marge * 2) / Math.max(maxX - minX, maxZ - minZ);
+
+/* Orientation de la carte : on veut la ligne d'arrivée sur la
+   DROITE et la voiture qui remonte au départ. Une rotation de
+   la vue de 60° donne exactement ça (calculée sur le tracé
+   réel). On précalcule bornes et cos/sin une seule fois. */
+const ANGLE_CARTE = 60 * Math.PI / 180;
+const COS_CARTE = Math.cos(ANGLE_CARTE), SIN_CARTE = Math.sin(ANGLE_CARTE);
 function versCarte(x, z) {
+  // 1) base canvas : px = x, py = -z
+  const bx = x, by = -z;
+  // 2) rotation de ANGLE_CARTE (sens horaire canvas)
+  const rx = bx * COS_CARTE - by * SIN_CARTE;
+  const ry = bx * SIN_CARTE + by * COS_CARTE;
+  // 3) mise à l'échelle (bornes calculées sur les points tournés)
   return {
-    px: marge + (x - minX) * echelle,
-    py: TAILLE_CARTE - marge - (z - minZ) * echelle, // -z vers le haut de la carte
+    px: marge + (rx - CARTES.minX) * CARTES.echelle,
+    py: TAILLE_CARTE - marge - (ry - CARTES.minY) * CARTES.echelle,
   };
 }
+const CARTES = (() => {
+  let mnX = Infinity, mxX = -Infinity, mnY = Infinity, mxY = -Infinity;
+  for (const p of echantillons) {
+    const bx = p.x, by = -p.z;
+    const rx = bx * COS_CARTE - by * SIN_CARTE;
+    const ry = bx * SIN_CARTE + by * COS_CARTE;
+    if (rx < mnX) mnX = rx; if (rx > mxX) mxX = rx;
+    if (ry < mnY) mnY = ry; if (ry > mxY) mxY = ry;
+  }
+  const ech = (TAILLE_CARTE - marge * 2) / Math.max(mxX - mnX, mxY - mnY);
+  return { minX: mnX, minY: mnY, echelle: ech };
+})();
 
 // Tracé pré-dessiné (offscreen)
 const fondCarte = document.createElement('canvas');
@@ -810,7 +861,7 @@ function update() {
     // tour fini et on garde le MEILLEUR
     const maintenant = performance.now();
     if (debutTour !== null) {
-      const duree = maintenant - debutTour;
+      const duree = maintenant - debutTour - decalagePause;
       dernierTour = duree; // le tour fini devient le DERNIER
       if (meilleurTour === null || duree < meilleurTour) {
         meilleurTour = duree;
@@ -818,11 +869,13 @@ function update() {
       }
     }
     debutTour = maintenant; // nouveau tour : le chrono repart
+    decalagePause = 0; // repart sans décalage pour le tour suivant
   }
 
   // Affichage du chrono. Avant la ligne de départ il reste
-  // à 00:00:00 : il ne démarre qu'au premier franchissement
-  majChrono(debutTour === null ? 0 : performance.now() - debutTour);
+  // à 00:00:00 : il ne démarre qu'au premier franchissement.
+  // Le temps de pause est déduit pour ne pas fausser le tour.
+  majChrono(debutTour === null ? 0 : performance.now() - debutTour - decalagePause);
   majMiniCarte(); // flèche voiture sur la mini-carte
   update.dernierIndice = voiture.dernierIndice;
 
@@ -889,7 +942,7 @@ function mesurerFPS() {
 
 function animer() {
   requestAnimationFrame(animer);
-  update();
+  if (!enPause) update(); // en pause : la scène se fige
   renderer.render(scene, camera);
   mesurerFPS();
 }
