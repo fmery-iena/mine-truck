@@ -418,7 +418,9 @@ function distanceALaPiste(x, z) {
    Purement visuel : pas d'ombre portée (castShadow off) pour
    rester performant, mais elles reçoivent les ombres. */
 const COULEURS_TOUFFE = [0x6B9E47, 0x8BC34A];
-const NB_TOUFFES = 550; // densité : à ajuster si perf
+// O2 : densité réduite de moitié pour la perf (550 → 240).
+// Toujours largement assez pour marquer la zone qui ralentit.
+const NB_TOUFFES = 240;
 
 for (let i = 0; i < NB_TOUFFES; i++) {
   const x = 3 + (Math.random() - 0.5) * 175;
@@ -427,7 +429,7 @@ for (let i = 0; i < NB_TOUFFES; i++) {
   if (distanceALaPiste(x, z) < demi + 2.5) continue;
 
   const touffe = new THREE.Group();
-  const nBrins = 1 + Math.floor(Math.random() * 3); // 1 à 3 brins
+  const nBrins = 1 + Math.floor(Math.random() * 2); // O2 : 1 à 2 brins seulement
   for (let b = 0; b < nBrins; b++) {
     const couleur = COULEURS_TOUFFE[Math.floor(Math.random() * COULEURS_TOUFFE.length)];
     const hauteur = 0.3 + Math.random() * 0.35;
@@ -441,6 +443,10 @@ for (let i = 0; i < NB_TOUFFES; i++) {
     touffe.add(bloc(0.2, 0.2, 0.2, Math.random() < 0.5 ? 0xFFF9C4 : 0xFFCDD2,
       0, 0.45, 0));
   }
+  // O1 : les brins ne reçoivent PAS d'ombres — le shader
+  // d'ombre sur ~400 petits meshes coûtait cher pour un
+  // effet invisible sur des brins de 15 cm
+  touffe.traverse(e => { if (e.isMesh) e.receiveShadow = false; });
   touffe.position.set(x, 0, z);
   scene.add(touffe);
 }
