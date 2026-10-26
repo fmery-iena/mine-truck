@@ -588,22 +588,36 @@ const pickup = creerPickup();
 activerOmbresPortees(pickup); // la voiture projette une ombre
 scene.add(pickup);
 
-/* ---------- NUAGES LOW-POLY (ambiance) ----------
-   Quelques blocs blancs en altitude qui dérivent
-   lentement : ~12 draw calls, quasi gratuit. */
+/* ---------- NUAGES PLATS STYLE MINECRAFT ----------
+   Comme sur l'image de référence : de grands plateaux
+   blancs et plats (blocs 2D très étendus en X/Z, très fins
+   en Y), étalés en grille sur tout le ciel, qui dérivent
+   lentement. ~1 matériau partagé, quasi gratuit. */
 const nuages = [];
 const VITESSE_NUAGE = 0.02; // dérive lente vers +X (unités par frame)
-for (let i = 0; i < 9; i++) {
+const matNuage = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, fog: false });
+const geoNuage = new THREE.BoxGeometry(1, 1, 1);
+const TAILLE_NUAGE = 2.2; // agrandit/rétrécit les plateaux
+for (let i = 0; i < 14; i++) {
   const nuage = new THREE.Group();
-  for (let j = 0; j < 3; j++) {
-    const t = bloc(4 + Math.random() * 4, 1.2, 3 + Math.random() * 3, 0xFFFFFF,
-      (Math.random() - 0.5) * 5, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 3);
-    t.material = null; // remplacé juste après par un matériau non éclairé
+  // Plateau principal + 1 à 2 plateaux satellites légèrement décalés
+  const nBlocs = 2 + Math.floor(Math.random() * 2);
+  for (let j = 0; j < nBlocs; j++) {
+    const t = new THREE.Mesh(geoNuage, matNuage);
+    t.scale.set(
+      (14 + Math.random() * 10) * TAILLE_NUAGE,
+      1.1,
+      (9 + Math.random() * 7) * TAILLE_NUAGE
+    );
+    t.position.set(
+      (Math.random() - 0.5) * 24,
+      (Math.random() - 0.5) * 0.6,
+      (Math.random() - 0.5) * 16
+    );
     nuage.add(t);
   }
-  // matériau blanc non éclairé, insensible au fog pour rester visible
-  nuage.traverse(e => { if (e.isMesh) e.material = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, fog: false }); e.receiveShadow = false; });
-  nuage.position.set((Math.random() - 0.5) * 260, 42 + Math.random() * 8, (Math.random() - 0.5) * 260);
+  nuage.traverse(e => { e.receiveShadow = false; e.castShadow = false; });
+  nuage.position.set((Math.random() - 0.5) * 300, 48 + Math.random() * 10, (Math.random() - 0.5) * 300);
   scene.add(nuage);
   nuages.push(nuage);
 }
@@ -1115,7 +1129,7 @@ function animer() {
   // Dérive lente des nuages, avec rebouclage une fois hors zone
   for (const n of nuages) {
     n.position.x += VITESSE_NUAGE;
-    if (n.position.x > 160) n.position.x = -160;
+    if (n.position.x > 180) n.position.x = -180;
   }
   // Le skydome suit la caméra : le dégradé reste stable
   skydome.position.copy(camera.position);
