@@ -239,16 +239,16 @@ for (let i = 0; i < NB_ECHANTILLONS; i++) {
     groupeRoute.add(milieu);
   }
 
-  // Barrières bois de chaque côté — 1 pavé sur 6 seulement
+  // Barrières bois de chaque côté — 1 pavé sur 12 seulement
   // (moitié moins qu'avant pour laisser la place libre de
   // circuler et alléger le rendu)
-  if (i % 6 === 0) {
+  if (i % 12 === 0) {
     for (const cote of [-1, 1]) {
       const bx = p.x + Math.cos(angle) * demi * cote;
       const bz = p.z - Math.sin(angle) * demi * cote;
       groupeRoute.add(bloc(0.5, 1.2, 0.5, 0x9B7653, bx, 0.65, bz));
       groupeRoute.add(bloc(0.3, 0.25, 0.6, 0xF5F5F5, bx, 1.15, bz));
-      enregistrerObstacle(bx, bz, 0.5, 'solide', null); // poteau
+      enregistrerObstacle(bx, bz, 0.35, 'solide', null); // poteau
     }
   }
 }
@@ -297,7 +297,7 @@ function creerMaison(x, z, ry) {
   maison.add(bloc(1.0, 1.0, 0.15, 0x81D4FA, 1.5, 1.8, 2.3));
   maison.position.set(x, 0, z);
   maison.rotation.y = ry;
-  enregistrerObstacle(x, z, 3.4, 'solide', maison); // murs + toit
+  enregistrerObstacle(x, z, 2.8, 'solide', maison); // murs + toit
   return maison;
 }
 
@@ -317,7 +317,7 @@ function creerVache(x, z) {
   vache.add(bloc(0.25, 1.0, 0.25, 0x37474F, 0.45, 0.5, 0.8));
   vache.position.set(x, 0, z);
   vache.rotation.y = Math.random() * Math.PI * 2;
-  enregistrerObstacle(x, z, 1.4, 'vache', vache); // corps (poussable)
+  enregistrerObstacle(x, z, 1.2, 'vache', vache); // corps (poussable)
   return vache;
 }
 
@@ -617,7 +617,7 @@ function update() {
   // de la normale et la vitesse est amortie (rebond doux,
   // jamais de blocage violent). Contre une VACHE : c'est la
   // vache qui se fait pousser (option A) + petit meuh !
-  const RAYON_VOITURE = 1.8;
+  const RAYON_VOITURE = 1.2; // resserré : la voiture ne doit être freinée qu'au vrai contact
   for (const obs of obstacles) {
     const dx = voiture.x - obs.x;
     const dz = voiture.z - obs.z;
