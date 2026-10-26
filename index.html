@@ -87,8 +87,7 @@ import * as THREE from 'three';
 
 /* ---------- 1. SCÈNE, CAMÉRA, LUMIÈRES ---------- */
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB); // ciel bleu Minecraft
-scene.fog = new THREE.Fog(0x87CEEB, 90, 190);  // brume au loin
+scene.fog = new THREE.Fog(0xBFE8FF, 90, 190); // brume assortie à l'horizon du dégradé
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 400);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -102,14 +101,66 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
-/* ---------- SOLEIL VISIBLE + LUMIÈRE RÉALISTE ----------
+/* ---------- LUMIÈRE RÉALISTE + SOLEIL (dans le skydome)
    La lumière directionnelle est rehaussée (60, 90, 40)
    pour des ombres naturelles, avec une shadow map
    resserrée sur la zone de jeu (perf). Le soleil visible
-   est une sphère + halo (fog: false pour rester net au
-   loin). L'ambient légèrement bleuté donne un ciel « vivant »
-   sans skybox coûteuse. */
+   est dessiné dans le shader du skydome (voir plus bas),
+   aligné sur la direction exacte de la lumière.
+   L'ambient légèrement bleuté complète l'ambiance. */
 const POSITION_SOLEIL = new THREE.Vector3(60, 90, 40);
+
+/* ---------- SKYDOME DÉGRADÉ + SOLEIL (shader)
+   Grande sphère inversée (BackSide) rendue avec un
+   ShaderMaterial très léger : dégradé vertical bleu
+   (profond en haut, clair à l'horizon) + disque solaire
+   dessiné dans la direction exacte de la DirectionalLight
+   (donc toujours cohérent avec les ombres). fog: false et
+   depthWrite: false → coût quasi nul (1 draw call). */
+const DIRECTION_SOLEIL = POSITION_SOLEIL.clone().normalize();
+const skydome = new THREE.Mesh(
+  new THREE.SphereGeometry(360, 24, 12),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    fog: false,
+    depthWrite: false,
+    uniforms: {
+      couleurZenith: { value: new THREE.Color(0x3D7BC4) }, // bleu profond en haut
+      couleurHorizon: { value: new THREE.Color(0xBFE8FF) }, // bleu clair à l'horizon
+      couleurLisiere: { value: new THREE.Color(0xE8F7FF) }, // liseré pâle tout en bas
+      dirSoleil: { value: DIRECTION_SOLEIL },
+      couleurSoleil: { value: new THREE.Color(0xFFF3B0) }, // disque solaire
+      couleurHalo: { value: new THREE.Color(0xFFE994) },   // halo doux autour
+    },
+    vertexShader: `
+      varying vec3 vDirection;
+      void main() {
+        vDirection = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      varying vec3 vDirection;
+      uniform vec3 couleurZenith, couleurHorizon, couleurLisiere;
+      uniform vec3 dirSoleil, couleurSoleil, couleurHalo;
+      void main() {
+        vec3 dir = normalize(vDirection);
+        // Dégradé vertical : 1 en haut (zénith), 0 à l'horizon
+        float h = clamp(dir.y, 0.0, 1.0);
+        vec3 ciel = mix(couleurHorizon, couleurZenith, pow(h, 0.55));
+        // Liseré pâle juste sous/à l'horizon
+        ciel = mix(ciel, couleurLisiere, smoothstep(0.0, -0.15, dir.y));
+        // Soleil : disque net + halo doux dans la direction de la lumière
+        float aligne = dot(dir, normalize(dirSoleil));
+        float disque = smoothstep(0.9985, 0.9995, aligne);
+        float halo = smoothstep(0.94, 0.999, aligne) * 0.55;
+        ciel = mix(ciel, couleurHalo, halo);
+        ciel = mix(ciel, couleurSoleil, disque);
+        gl_FragColor = vec4(ciel, 1.0);
+      }`
+  })
+);
+skydome.renderOrder = -10; // rendu en premier, derrière tout le reste
+scene.add(skydome);
 
 const soleil = new THREE.DirectionalLight(0xFFF3E0, 2.2); // teinte chaude
 soleil.position.copy(POSITION_SOLEIL);
@@ -128,20 +179,10 @@ scene.add(soleil.target); // cible au centre de la piste
 
 scene.add(new THREE.AmbientLight(0xBFD9FF, 0.5)); // ambiance ciel
 
-// Le soleil visible : sphère jaune + halo semi-transparent
-const groupeSoleil = new THREE.Group();
-groupeSoleil.position.copy(POSITION_SOLEIL).multiplyScalar(1.4);
-const sphSoleil = new THREE.Mesh(
-  new THREE.SphereGeometry(7, 16, 12),
-  new THREE.MeshBasicMaterial({ color: 0xFFE082, fog: false })
-);
-groupeSoleil.add(sphSoleil);
-const halo = new THREE.Mesh(
-  new THREE.SphereGeometry(9.5, 16, 12),
-  new THREE.MeshBasicMaterial({ color: 0xFFF9C4, fog: false, transparent: true, opacity: 0.3 })
-);
-groupeSoleil.add(halo);
-scene.add(groupeSoleil);
+// Le soleil visible est désormais dessiné DANS le skydome
+// (disque + halo doux, aligné sur DIRECTION_SOLEIL) : plus de
+// géométrie dédiée, et il reste parfaitement cohérent avec
+// la DirectionalLight qui projette les ombres.
 
 /* =========================================================
    2. LE CIRCUIT
@@ -551,7 +592,8 @@ scene.add(pickup);
    Quelques blocs blancs en altitude qui dérivent
    lentement : ~12 draw calls, quasi gratuit. */
 const nuages = [];
-for (let i = 0; i < 6; i++) {
+const VITESSE_NUAGE = 0.02; // dérive lente vers +X (unités par frame)
+for (let i = 0; i < 9; i++) {
   const nuage = new THREE.Group();
   for (let j = 0; j < 3; j++) {
     const t = bloc(4 + Math.random() * 4, 1.2, 3 + Math.random() * 3, 0xFFFFFF,
@@ -560,7 +602,7 @@ for (let i = 0; i < 6; i++) {
     nuage.add(t);
   }
   // matériau blanc non éclairé, insensible au fog pour rester visible
-  nuage.traverse(e => { if (e.isMesh) e.material = new THREE.MeshBasicMaterial({ color: 0xFFFFFF }); e.receiveShadow = false; });
+  nuage.traverse(e => { if (e.isMesh) e.material = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, fog: false }); e.receiveShadow = false; });
   nuage.position.set((Math.random() - 0.5) * 260, 42 + Math.random() * 8, (Math.random() - 0.5) * 260);
   scene.add(nuage);
   nuages.push(nuage);
@@ -1070,6 +1112,13 @@ function mesurerFPS() {
 function animer() {
   requestAnimationFrame(animer);
   if (!enPause) update(); // en pause : la scène se fige
+  // Dérive lente des nuages, avec rebouclage une fois hors zone
+  for (const n of nuages) {
+    n.position.x += VITESSE_NUAGE;
+    if (n.position.x > 160) n.position.x = -160;
+  }
+  // Le skydome suit la caméra : le dégradé reste stable
+  skydome.position.copy(camera.position);
   renderer.render(scene, camera);
   mesurerFPS();
 }
