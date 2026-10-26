@@ -41,6 +41,7 @@
   <span id="tour">&#127937; Tour 1</span>
 </div>
 <div id="chrono">TOUR : 00:00:00
+DERNIER : 00:00:00
 MEILLEUR : 00:00:00</div>
 <div id="fps">-- FPS</div>
 <div id="info">&#8593; avancer &nbsp; &#8595; freiner/reculer &nbsp; &#8592; &#8594; tourner<br>Espace : klaxon (canard) &#129414;</div>
@@ -423,6 +424,7 @@ const tourElt = document.getElementById('tour');
    Format : MM:SS:CC (minutes : secondes : centièmes) */
 const chronoElt = document.getElementById('chrono');
 let debutTour = null; // timestamp du début du tour en cours
+let dernierTour = null;  // temps du tour PRÉCÉDENT (affiché DERNIER)
 let meilleurTour = parseFloat(localStorage.getItem('meilleurTour')) || null;
 
 function formaterTemps(ms) {
@@ -436,6 +438,7 @@ function formaterTemps(ms) {
 
 function majChrono(ms) {
   chronoElt.textContent = 'TOUR : ' + formaterTemps(ms)
+    + '\nDERNIER : ' + formaterTemps(dernierTour)
     + '\nMEILLEUR : ' + formaterTemps(meilleurTour);
 }
 majChrono(null);
@@ -584,6 +587,7 @@ function update() {
     const maintenant = performance.now();
     if (debutTour !== null) {
       const duree = maintenant - debutTour;
+      dernierTour = duree; // le tour fini devient le DERNIER
       if (meilleurTour === null || duree < meilleurTour) {
         meilleurTour = duree;
         localStorage.setItem('meilleurTour', String(duree));
