@@ -480,12 +480,14 @@ function klaxonCanard() {
    de la piste, elle ralentit dans l'herbe. Passer la
    ligne de damier = un tour de plus !
    ========================================================= */
-// Position de départ : un peu AVANT la ligne de damier,
-// et on roule dans le sens INVERSE du circuit (cap =
-// tangente retournée). On démarre donc à la fin de la
-// boucle (indice proche de NB_ECHANTILLONS) : en avançant
-// à l'envers, on franchit la ligne de damier tout de suite.
-const INDICE_DEPART = NB_ECHANTILLONS - 15;
+// Position de départ : un peu AVANT la ligne de damier
+// dans le sens de course. On roule dans le sens INVERSE
+// du circuit (cap = tangente retournée), donc on démarre
+// juste APRÈS l'indice 0 (la ligne) : en avançant à
+// l'envers (indices qui diminuent), on franchit la ligne
+// de damier tout de suite, puis on continue vers les
+// indices élevés.
+const INDICE_DEPART = 15;
 const posDepart = echantillons[INDICE_DEPART];
 const voiture = {
   x: posDepart.x,
