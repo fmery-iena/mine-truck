@@ -452,44 +452,86 @@ function distanceALaPiste(x, z) {
   return Math.sqrt(min);
 }
 
-/* ---------- HERBE DÉTAILLÉE HORS PISTE ----------
-   Des touffes low-poly semées partout SAUF sur la piste :
-   le joueur voit d'un coup d'œil que l'herbe « broussailleuse »
-   est la zone qui ralentit, par opposition à la route lisse.
-   Purement visuel : pas d'ombre portée (castShadow off) pour
-   rester performant, mais elles reçoivent les ombres. */
+/* ---------- HERBE DÉTAILLÉE HORS PISTE (InstancedMesh) ----------
+   Des brins low-poly semés partout SAUF sur la piste : le joueur
+   voit d'un coup d'œil que l'herbe « broussailleuse » est la
+   zone qui ralentit, par opposition à la route lisse.
+   PERF : tout est regroupé dans UN SEUL InstancedMesh → 1 draw
+   call pour ~2000 brins (au lieu de ~350 meshes individuels
+   avant, pour 4x moins de brins). Couleur et ondulation « vent »
+   gérées par instance dans le vertex shader (onBeforeCompile) :
+   chaque brin penche légèrement selon sa position et le temps.
+   Pour changer la densité : modifier NB_BRINS ci-dessous. */
 const COULEURS_TOUFFE = [0x6B9E47, 0x8BC34A];
-// O2 : densité réduite de moitié pour la perf (550 → 240).
-// Toujours largement assez pour marquer la zone qui ralentit.
-const NB_TOUFFES = 240;
+const NB_BRINS = 2000;        // densité de l'herbe
+const FLEURS = true;           // mini-fleurs semées par-ci par-là
+const uniformTemps = { value: 0 }; // temps écoulé, partagé avec le shader d'herbe
 
-for (let i = 0; i < NB_TOUFFES; i++) {
+// matériau avec couleurs PAR INSTANCE (instanceColor)
+const matHerbe = new THREE.MeshLambertMaterial();
+matHerbe.onBeforeCompile = (shader) => {
+  shader.uniforms.uTemps = uniformTemps;
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', `
+      #include <common>
+      uniform float uTemps;`) // temps écoulé pour l'ondulation
+    // Ondulation : on incline le haut du brin (position.y > 0 dans
+    // l'espace du cube unitaire étiré par la matrice d'instance)
+    // d'une oscillation sinusoïdale propre à chaque brin (phase =
+    // position du brin) → effet de vent léger, quasi gratuit.
+    .replace('#include <begin_vertex>', `
+      #include <begin_vertex>
+      float phase = instanceMatrix[3].x * 1.7 + instanceMatrix[3].z * 2.3;
+      float souffle = sin(uTemps * 2.0 + phase) * 0.12;
+      transformed.x += souffle * max(position.y, 0.0) * 2.0;
+      transformed.z += souffle * 0.6 * max(position.y, 0.0) * 2.0;`);
+};
+
+// 1) On sème d'abord les positions (hors piste), puis on remplit
+//    les buffers de matrices/couleurs du InstancedMesh.
+const brins = [];
+for (let i = 0; brins.length < NB_BRINS; i++) {
   const x = 3 + (Math.random() - 0.5) * 175;
   const z = -2 + (Math.random() - 0.5) * 175;
   // pas d'herbe sur la piste ni juste à côté (zone roulable nette)
   if (distanceALaPiste(x, z) < demi + 2.5) continue;
+  const hauteur = 0.3 + Math.random() * 0.35;
+  brins.push({ x, z, hauteur, couleur: COULEURS_TOUFFE[Math.floor(Math.random() * COULEURS_TOUFFE.length)] });
+}
 
-  const touffe = new THREE.Group();
-  const nBrins = 1 + Math.floor(Math.random() * 2); // O2 : 1 à 2 brins seulement
-  for (let b = 0; b < nBrins; b++) {
-    const couleur = COULEURS_TOUFFE[Math.floor(Math.random() * COULEURS_TOUFFE.length)];
-    const hauteur = 0.3 + Math.random() * 0.35;
-    const brin = bloc(0.15, hauteur, 0.15, couleur,
-      (Math.random() - 0.5) * 0.8, hauteur / 2, (Math.random() - 0.5) * 0.8);
-    brin.rotation.y = Math.random() * Math.PI;
-    touffe.add(brin);
+const herbeInstance = new THREE.InstancedMesh(geoCube, matHerbe, brins.length);
+const m = new THREE.Matrix4();
+const q = new THREE.Quaternion();
+const pos = new THREE.Vector3();
+const ech = new THREE.Vector3();
+const col = new THREE.Color();
+brins.forEach((b, i) => {
+  pos.set(b.x, b.hauteur / 2, b.z);
+  q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI);
+  ech.set(0.15, b.hauteur, 0.15);
+  herbeInstance.setMatrixAt(i, m.compose(pos, q, ech));
+  herbeInstance.setColorAt(i, col.setHex(b.couleur));
+});
+herbeInstance.castShadow = false;
+herbeInstance.receiveShadow = false; // les petits brins n'ont pas besoin d'ombres
+scene.add(herbeInstance);
+
+// 2) Les mini-fleurs : un second InstancedMesh partagé (1 draw call)
+if (FLEURS) {
+  const COULEURS_FLEUR = [0xFFF9C4, 0xFFCDD2, 0xF8BBD0];
+  const positionsFleurs = [];
+  for (const b of brins) {
+    if (Math.random() < 0.03) positionsFleurs.push(b); // ~3% des brins portent une fleur
   }
-  // parfois une mini-fleur pour la vie
-  if (Math.random() < 0.12) {
-    touffe.add(bloc(0.2, 0.2, 0.2, Math.random() < 0.5 ? 0xFFF9C4 : 0xFFCDD2,
-      0, 0.45, 0));
-  }
-  // O1 : les brins ne reçoivent PAS d'ombres — le shader
-  // d'ombre sur ~400 petits meshes coûtait cher pour un
-  // effet invisible sur des brins de 15 cm
-  touffe.traverse(e => { if (e.isMesh) e.receiveShadow = false; });
-  touffe.position.set(x, 0, z);
-  scene.add(touffe);
+  const fleursInstance = new THREE.InstancedMesh(
+    geoCube, new THREE.MeshBasicMaterial(), positionsFleurs.length
+  );
+  positionsFleurs.forEach((b, i) => {
+    pos.set(b.x, b.hauteur + 0.12, b.z);
+    fleursInstance.setMatrixAt(i, m.compose(pos, new THREE.Quaternion(), ech.set(0.2, 0.2, 0.2)));
+    fleursInstance.setColorAt(i, col.setHex(COULEURS_FLEUR[Math.floor(Math.random() * COULEURS_FLEUR.length)]));
+  });
+  scene.add(fleursInstance);
 }
 
 /* Remplit la prairie : arbres, maisons, vaches */
@@ -1125,6 +1167,7 @@ function mesurerFPS() {
 
 function animer() {
   requestAnimationFrame(animer);
+  uniformTemps.value = performance.now() / 1000; // pilote l'ondulation de l'herbe
   if (!enPause) update(); // en pause : la scène se fige
   // Dérive lente des nuages, avec rebouclage une fois hors zone
   for (const n of nuages) {
