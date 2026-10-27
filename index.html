@@ -56,21 +56,45 @@
     touch-action: none; user-select: none; -webkit-user-select: none;
     z-index: 5; pointer-events: none; /* le vide laisse passer les clics */
   }
+  /* Un bouton = un conteneur PLUS GRAND que le visuel (padding invisible)
+     → la hitbox dépasse le rond dessiné, les appuis ratés marchent quand
+     même. 120px de hitbox pour ~86px de visuel, et 0 chevauchement possible
+     puisque chaque bouton occupe sa propre cellule avec marge. */
   body.mobile #tactile .btn {
-    position: absolute; pointer-events: auto; /* seuls les boutons captent le doigt */
-    width: 72px; height: 72px; border-radius: 14px;
-    border: 3px solid rgba(255,255,255,0.7);
-    background: rgba(0,0,0,0.45);
-    color: #fff; font: bold 30px/1 "Courier New", monospace;
+    position: absolute; pointer-events: auto;
+    width: 120px; height: 120px; border-radius: 24px;
+    background: none; border: none; padding: 0;
     display: flex; align-items: center; justify-content: center;
     touch-action: none; /* pas de scroll/zoom quand on appuie dessus */
   }
-  body.mobile #tactile .btn:active { background: rgba(255,255,255,0.4); }
-  #btnGauche  { left: 16px;  bottom: 96px; }
-  #btnDroite  { left: 104px; bottom: 96px; }
-  #btnHaut    { left: 60px;  bottom: 176px; }
-  #btnBas     { left: 60px;  bottom: 20px; }
-  #btnKlaxon  { right: 20px; bottom: 40px; width: 84px; height: 84px; font-size: 22px; }
+  body.mobile #tactile .btn span {
+    width: 86px; height: 86px; border-radius: 20px;
+    border: 3px solid rgba(255,255,255,0.75);
+    background: rgba(0,0,0,0.45);
+    color: #fff; font: bold 42px/1 "Courier New", monospace;
+    display: flex; align-items: center; justify-content: center;
+  }
+  body.mobile #tactile .btn:active span { background: rgba(255,255,255,0.45); }
+  /* ZONE GAUCHE : direction (gauche / droite uniquement, en bas à gauche
+     de l'écran, au pouce). L'écart de 240px entre les deux boutons
+     rend tout appui accidentel impossible. */
+  #btnGauche  { left: 10px;  bottom: 40px; }
+  #btnDroite  { left: 250px; bottom: 40px; }
+  /* ZONE DROITE : accélérer (gros, en bas à droite), freiner au-dessus,
+     klaxon à droite — bien séparés du groupe gauche. */
+  #btnGaz     { right: 130px; bottom: 40px; }
+  #btnGaz span { width: 96px; height: 96px; }
+  #btnFrein   { right: 130px; bottom: 200px; }
+  #btnKlaxon  { right: 10px;  bottom: 40px; }
+  /* Très petits écrans : on resserre en gardant les tailles (les hitbox
+     de 120px restent) — mieux vaut chevaucher légèrement la coiffe que
+     rendre les boutons inutilisables. */
+  @media (max-width: 400px) {
+    #btnGauche { left: 0; }
+    #btnDroite { left: 220px; }
+    #btnGaz    { right: 110px; }
+    #btnKlaxon { right: 0; }
+  }
 
   /* ---------- UI adaptée aux petits écrans ---------- */
   @media (max-width: 700px) {
@@ -95,13 +119,14 @@ MEILLEUR : 00:00:00</div>
 <canvas id="minimap" width="150" height="150"></canvas>
 <div id="info">&#8593; avancer &nbsp; &#8595; freiner/reculer &nbsp; &#8592; &#8594; tourner<br>Espace : klaxon (canard) &#129414;</div>
 
-<!-- Contrôles tactiles : affichés uniquement sur mobile (voir détection plus bas) -->
+<!-- Contrôles tactiles : affichés uniquement sur mobile (voir détection plus bas).
+     Le <span> intérieur est le visuel ; le <button> autour est la hitbox étendue. -->
 <div id="tactile">
-  <button class="btn" id="btnHaut"    data-touche="ArrowUp"    aria-label="Avancer">&#8593;</button>
-  <button class="btn" id="btnBas"     data-touche="ArrowDown"  aria-label="Freiner">&#8595;</button>
-  <button class="btn" id="btnGauche"  data-touche="ArrowLeft"  aria-label="Tourner à gauche">&#8592;</button>
-  <button class="btn" id="btnDroite"  data-touche="ArrowRight" aria-label="Tourner à droite">&#8594;</button>
-  <button class="btn" id="btnKlaxon"  data-touche="Klaxon"     aria-label="Klaxon canard">&#129414;</button>
+  <button class="btn" id="btnGauche"  data-touche="ArrowLeft"  aria-label="Tourner à gauche"><span>&#8592;</span></button>
+  <button class="btn" id="btnDroite"  data-touche="ArrowRight" aria-label="Tourner à droite"><span>&#8594;</span></button>
+  <button class="btn" id="btnGaz"     data-touche="ArrowUp"    aria-label="Accélérer"><span>&#9650;</span></button>
+  <button class="btn" id="btnFrein"   data-touche="ArrowDown"  aria-label="Freiner"><span>&#9660;</span></button>
+  <button class="btn" id="btnKlaxon"  data-touche="Klaxon"     aria-label="Klaxon canard"><span>&#129414;</span></button>
 </div>
 
 <!-- Three.js via CDN : rien à installer, il faut juste internet -->
