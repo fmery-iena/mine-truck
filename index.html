@@ -1370,11 +1370,12 @@ function update() {
   // Virage à droite (direction=1) → la force les pousse vers la
   // gauche de la benne ; virage à gauche → vers la droite.
   const forceVirage = direction * facteurVitesse; // -1 .. 1
+  const tMaintenant = performance.now() / 1000; // pour le petit picorage idle
   for (const poule of poules) {
     poule.inertie += (forceVirage - poule.inertie) * poule.souplesse;
     poule.rotation.z = poule.inertie * 0.4;              // bascule du corps
     poule.position.x = poule.xBase - poule.inertie * 0.14; // glissée dans la benne
-    poule.rotation.x = Math.sin(t * 2.5 + poule.phase) * 0.03; // petit picorage idle
+    poule.rotation.x = Math.sin(tMaintenant * 2.5 + poule.phase) * 0.03; // petit picorage idle
   }
 
   // Diamants : ils tournent, flottent, et se ramassent au contact
