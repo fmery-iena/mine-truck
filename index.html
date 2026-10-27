@@ -895,7 +895,12 @@ addEventListener('keyup', e => { touches[e.code] = false; });
    car pointer: fine + grand écran = desktop. */
 const pointerGrossier = matchMedia('(pointer: coarse)').matches;
 const aTactile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const estMobile = (pointerGrossier || aTactile) && Math.min(innerWidth, innerHeight) <= 820;
+/* Un pointeur « doigt » (pointer: coarse) suffit : c'est le signal
+   le plus fiable, même sur tablette en paysage. Le écran tactile +
+   grande largeur sert de secours ; la condition de taille ne
+   s'applique qu'au cas tactile seul, pour ne pas classer un
+   desktop tactile (souris + écran connecté) en mobile. */
+const estMobile = pointerGrossier || (aTactile && Math.min(innerWidth, innerHeight) <= 1024);
 
 function appliquerModeMobile() {
   document.body.classList.toggle('mobile', estMobile);
