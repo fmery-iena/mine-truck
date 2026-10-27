@@ -781,6 +781,57 @@ const pickup = creerPickup();
 activerOmbresPortees(pickup); // la voiture projette une ombre
 scene.add(pickup);
 
+/* ---------- LES POULES DU COFFRE ----------
+   Deux grosses poules (rousse et noire) installées dans la benne,
+   à l'arrière du pickup : elles dépassent nettement des ridelles
+   (tête + crête bien visibles au-dessus de la cabine !).
+   Style voxel : corps + tête + crête + bec + barbillon + ailes.
+   Elles sont des enfants du pickup → suivent la voiture, mais
+   gardent leur propre petit balancement d'inertie dans les
+   virages (voir update()). Pour changer leur taille : modifier
+   ÉCHELLE_POULE. */
+const ÉCHELLE_POULE = 1.25; // grosses poules bien visibles
+const poules = []; // pour l'animation d'inertie dans update()
+
+function creerPoule(couleurCorps, couleurAile, x, z, souplesse) {
+  const poule = new THREE.Group();
+  // corps bien dodu, posé sur le plancher de la benne
+  poule.add(bloc(0.85, 0.75, 1.0, couleurCorps, 0, 0.38, 0));
+  // tête haute (dépasse largement des ridelles !)
+  poule.add(bloc(0.5, 0.55, 0.5, couleurCorps, 0, 0.95, -0.4));
+  // crête rouge sur le crâne
+  poule.add(bloc(0.14, 0.22, 0.32, 0xD32F2F, 0, 1.32, -0.4));
+  // barbillon rouge sous le bec
+  poule.add(bloc(0.12, 0.16, 0.12, 0xD32F2F, 0, 0.68, -0.68));
+  // bec orange + yeux noirs
+  poule.add(bloc(0.14, 0.14, 0.3, 0xF57C00, 0, 0.85, -0.72));
+  poule.add(bloc(0.06, 0.1, 0.1, 0x111111, -0.26, 1.02, -0.62));
+  poule.add(bloc(0.06, 0.1, 0.1, 0x111111, 0.26, 1.02, -0.62));
+  // ailes légèrement plus sombres + queue relevée
+  poule.add(bloc(0.12, 0.45, 0.65, couleurAile, -0.47, 0.42, 0.05));
+  poule.add(bloc(0.12, 0.45, 0.65, couleurAile, 0.47, 0.42, 0.05));
+  poule.add(bloc(0.4, 0.4, 0.25, couleurAile, 0, 0.62, 0.55));
+  // pattes oranges
+  poule.add(bloc(0.1, 0.28, 0.1, 0xF57C00, -0.2, 0.14, 0.1));
+  poule.add(bloc(0.1, 0.28, 0.1, 0xF57C00, 0.2, 0.14, 0.1));
+
+  poule.scale.setScalar(ÉCHELLE_POULE);
+  poule.position.set(x, HAUTEUR_ROUTE + 0.72, z); // posée sur le plancher de la benne
+  // état pour l'inertie : chaque poule a sa souplesse → elles ne
+  // basculent jamais exactement en même temps, effet plus vivant
+  poule.inertie = 0;         // inclinaison actuelle (lissée)
+  poule.xBase = x;           // position de repos dans la benne
+  poule.souplesse = souplesse; // vitesse de réaction au virage
+  poule.phase = Math.random() * Math.PI * 2; // décale le picorage idle
+  poules.push(poule);
+  pickup.add(poule);
+}
+
+// La rousse à gauche, la noire à droite, toutes deux vers
+// l'arrière de la benne (z positif = coffre du pickup)
+creerPoule(0xB5651D, 0x8D4E16, -0.38, 1.35, 0.14); // rousse
+creerPoule(0x263238, 0x1B2328, 0.38, 1.5, 0.09);  // noire
+
 /* ---------- NUAGES PLATS STYLE MINECRAFT ----------
    Comme sur l'image de référence : de grands plateaux
    blancs et plats (blocs 2D très étendus en X/Z, très fins
@@ -1313,6 +1364,18 @@ function update() {
   pickup.position.set(voiture.x, HAUTEUR_ROUTE, voiture.z);
   pickup.rotation.y = voiture.cap + Math.PI; // l'avant du pickup regarde vers -z
   pickup.rotation.z = direction * 0.08 * facteurVitesse;
+
+  // Inertie des poules : même force que l'inclinaison du pickup,
+  // mais lissée par poule (souplement, jamais un basculement sec).
+  // Virage à droite (direction=1) → la force les pousse vers la
+  // gauche de la benne ; virage à gauche → vers la droite.
+  const forceVirage = direction * facteurVitesse; // -1 .. 1
+  for (const poule of poules) {
+    poule.inertie += (forceVirage - poule.inertie) * poule.souplesse;
+    poule.rotation.z = poule.inertie * 0.4;              // bascule du corps
+    poule.position.x = poule.xBase - poule.inertie * 0.14; // glissée dans la benne
+    poule.rotation.x = Math.sin(t * 2.5 + poule.phase) * 0.03; // petit picorage idle
+  }
 
   // Diamants : ils tournent, flottent, et se ramassent au contact
   const t = performance.now() / 1000;
