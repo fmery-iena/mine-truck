@@ -45,6 +45,42 @@
     text-shadow: 2px 2px 0 #3f3f3f; background: rgba(0,0,0,0.4);
     padding: 4px 10px; border-radius: 6px; user-select: none;
   }
+
+  /* ---------- CONTRÔLES TACTILES (mobile uniquement) ----------
+     Cachés par défaut : ne s'affichent que si le jeu détecte
+     un téléphone / une tablette (classe .mobile sur <body>).
+     Boutons gros (min 64px) et en bas : accessibles au pouce. */
+  #tactile { display: none; }
+  body.mobile #tactile {
+    display: block; position: fixed; inset: 0;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+    z-index: 5; pointer-events: none; /* le vide laisse passer les clics */
+  }
+  body.mobile #tactile .btn {
+    position: absolute; pointer-events: auto; /* seuls les boutons captent le doigt */
+    width: 72px; height: 72px; border-radius: 14px;
+    border: 3px solid rgba(255,255,255,0.7);
+    background: rgba(0,0,0,0.45);
+    color: #fff; font: bold 30px/1 "Courier New", monospace;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none; /* pas de scroll/zoom quand on appuie dessus */
+  }
+  body.mobile #tactile .btn:active { background: rgba(255,255,255,0.4); }
+  #btnGauche  { left: 16px;  bottom: 96px; }
+  #btnDroite  { left: 104px; bottom: 96px; }
+  #btnHaut    { left: 60px;  bottom: 176px; }
+  #btnBas     { left: 60px;  bottom: 20px; }
+  #btnKlaxon  { right: 20px; bottom: 40px; width: 84px; height: 84px; font-size: 22px; }
+
+  /* ---------- UI adaptée aux petits écrans ---------- */
+  @media (max-width: 700px) {
+    #hud { font-size: 16px; gap: 8px; top: 8px; }
+    #hud span { padding: 4px 10px; }
+    #minimap { width: 100px; height: 100px; top: 8px; left: 8px; }
+    #chrono { font-size: 13px; top: 8px; right: 8px; padding: 4px 8px; }
+    #info { display: none; } /* les indications clavier ne servent pas sur mobile */
+    body:not(.mobile) #info { display: block; font-size: 13px; padding: 6px 10px; }
+  }
 </style>
 </head>
 <body>
@@ -58,6 +94,15 @@ MEILLEUR : 00:00:00</div>
 <div id="fps">-- FPS</div>
 <canvas id="minimap" width="150" height="150"></canvas>
 <div id="info">&#8593; avancer &nbsp; &#8595; freiner/reculer &nbsp; &#8592; &#8594; tourner<br>Espace : klaxon (canard) &#129414;</div>
+
+<!-- Contrôles tactiles : affichés uniquement sur mobile (voir détection plus bas) -->
+<div id="tactile">
+  <button class="btn" id="btnHaut"    data-touche="ArrowUp"    aria-label="Avancer">&#8593;</button>
+  <button class="btn" id="btnBas"     data-touche="ArrowDown"  aria-label="Freiner">&#8595;</button>
+  <button class="btn" id="btnGauche"  data-touche="ArrowLeft"  aria-label="Tourner à gauche">&#8592;</button>
+  <button class="btn" id="btnDroite"  data-touche="ArrowRight" aria-label="Tourner à droite">&#8594;</button>
+  <button class="btn" id="btnKlaxon"  data-touche="Klaxon"     aria-label="Klaxon canard">&#129414;</button>
+</div>
 
 <!-- Three.js via CDN : rien à installer, il faut juste internet -->
 <script type="importmap">
@@ -836,6 +881,54 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') klaxonCanard();
 });
 addEventListener('keyup', e => { touches[e.code] = false; });
+
+/* ---------- CONTRÔLES TACTILES (mobile uniquement) ----------
+   On écrit directement dans `touches` avec les mêmes codes que
+   le clavier ("ArrowUp", ...) : la conduite n'a pas besoin de
+   savoir si l'input vient du clavier ou du doigt. */
+
+/* Détection mobile : on combine plusieurs indices fiables.
+   - matchMedia('(pointer: coarse)') : le pointeur principal est un doigt
+   - 'ontouchstart' : l'écran tactile existe vraiment
+   - largeur <= 820px : téléphone ou tablette en portrait
+   On garde le clavier sur desktop, même si un écran tactile y est branché,
+   car pointer: fine + grand écran = desktop. */
+const pointerGrossier = matchMedia('(pointer: coarse)').matches;
+const aTactile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const estMobile = (pointerGrossier || aTactile) && Math.min(innerWidth, innerHeight) <= 820;
+
+function appliquerModeMobile() {
+  document.body.classList.toggle('mobile', estMobile);
+  // Anti scroll/zoom UNIQUEMENT quand les contrôles tactiles sont actifs :
+  // sur desktop on ne touche à rien, la page reste normale.
+  document.addEventListener('touchmove', bloquerTactile, { passive: false });
+  document.addEventListener('gesturestart', bloquerTactile, { passive: false });
+  document.addEventListener('dblclick', bloquerTactile, { passive: false });
+  bloquerTactile.actif = estMobile;
+}
+function bloquerTactile(e) {
+  if (bloquerTactile.actif) e.preventDefault();
+}
+appliquerModeMobile();
+
+if (estMobile) {
+  // Chaque bouton presse la "touche" correspondante. pointerdown/pointerup
+  // + setPointerCapture : ça marche au doigt, et le bouton reste "collé"
+  // même si le doigt glisse un peu (comme une vraie manette).
+  for (const btn of document.querySelectorAll('#tactile .btn')) {
+    const code = btn.dataset.touche;
+    btn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      btn.setPointerCapture(e.pointerId);
+      if (code === 'Klaxon') { klaxonCanard(); return; }
+      touches[code] = true;
+    });
+    btn.addEventListener('pointerup',   () => { if (code !== 'Klaxon') touches[code] = false; });
+    btn.addEventListener('pointercancel',() => { if (code !== 'Klaxon') touches[code] = false; });
+    // Sécurité : si le doigt sort du bouton, on relâche quand même
+    btn.addEventListener('lostpointercapture', () => { touches[code] = false; });
+  }
+}
 
 let ctxAudio = null;
 /* Un petit "meuh" de vache quand on en pousse une */
