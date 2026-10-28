@@ -21,7 +21,6 @@ Three.js est chargé via CDN : il faut juste une connexion internet.
 
 - Le circuit est une **boucle fermée** : grandes courbes, virages en S, retour en épingle douce.
 - **Ligne de départ/arrivée en damier** : chaque passage = un tour de plus (compteur en haut).
-- **Diamants 💎** flottent au-dessus de la piste : touche-les pour les ramasser et monter le score.
 - Si tu sors de la piste, l'herbe **ralentit** le pickup — reviens sur l'asphalte !
 - Décor de prairie : **vaches 🐄**, arbres et maisons tout autour de la piste.
 
@@ -34,7 +33,7 @@ Tout le code est dans `index.html`, découpé en sections commentées :
 3. Le décor (arbres, maisons, vaches)
 4. La voiture (pickup + creeper en armure d'or)
 5. La conduite (position, cap, sortie de piste)
-6. Les diamants et le compteur de tours
+6. Le compteur de tours et le chrono
 7. Le klaxon canard
 
 ### Créer un nouveau circuit 🗺️
@@ -42,6 +41,11 @@ Tout le code est dans `index.html`, découpé en sections commentées :
 Le tracé est défini par la liste `POINTS_CIRCUIT` (des points `[x, z]` reliés
 en douceur). Change ces points et le circuit change ! Astuce : garde une
 bonne distance entre les points de passages opposés (au moins 25 blocs,
-la piste fait 10 blocs de large).
+la piste fait 10 blocs de large). `ECHELLE_CIRCUIT` (2 par défaut)
+agrandit tout le tracé proportionnellement.
+
+`CONFIG.largeurRoute` (20 par défaut) règle la largeur de la route :
+accotements, lignes blanches, poteaux et ligne de damier suivent
+automatiquement (tout est calculé à partir de cette valeur).
 
 Chaque section est marquée par `/* ---------- N. ... ---------- */` dans le fichier.

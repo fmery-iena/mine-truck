@@ -112,7 +112,6 @@
 </head>
 <body>
 <div id="hud">
-  <span id="score">&#128142; 0</span>
   <span id="tour">&#127937; Tour 1</span>
 </div>
 <div id="chrono">TOUR : 00:00:00
@@ -158,15 +157,15 @@ import * as THREE from 'three';
    4. La voiture (pickup + creeper en armure d'or)
    5. La conduite : la voiture tourne vraiment, elle peut
       sortir de la piste (ralentit dans l'herbe)
-   6. Diamants à ramasser + compteur de tours
+   6. Compteur de tours
    7. Klaxon canard
    ========================================================= */
 
 /* ---------- 1. SCÈNE, CAMÉRA, LUMIÈRES ---------- */
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xBFE8FF, 90, 190); // brume assortie à l'horizon du dégradé
+scene.fog = new THREE.Fog(0xBFE8FF, 180, 380); // brume repoussée : le circuit est 2x plus grand
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 400);
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 800);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 // P4 : on limite la densité de pixels (sur écran Retina/4K, le rendu
@@ -244,12 +243,12 @@ soleil.position.copy(POSITION_SOLEIL);
 soleil.castShadow = true;
 // Zone couverte par les ombres : juste la piste et ses abords
 soleil.shadow.mapSize.set(2048, 2048);
-soleil.shadow.camera.left = -80;
-soleil.shadow.camera.right = 80;
-soleil.shadow.camera.top = 80;
-soleil.shadow.camera.bottom = -80;
+soleil.shadow.camera.left = -160;
+soleil.shadow.camera.right = 160;
+soleil.shadow.camera.top = 160;
+soleil.shadow.camera.bottom = -160;
 soleil.shadow.camera.near = 10;
-soleil.shadow.camera.far = 300;
+soleil.shadow.camera.far = 600;
 soleil.shadow.bias = -0.0005; // évite les artefacts de bord
 scene.add(soleil);
 scene.add(soleil.target); // cible au centre de la piste
@@ -270,7 +269,7 @@ scene.add(new THREE.AmbientLight(0xBFD9FF, 0.5)); // ambiance ciel
    il suffit de changer les POINTS_CIRCUIT ci-dessous !
    ========================================================= */
 const CONFIG = {
-  largeurRoute: 10,
+  largeurRoute: 20, // route 2x plus large qu'avant (était 10)
   vitesseMax: 0.55,
   vitesseHerbe: 0.22,   // vitesse max quand on est dans l'herbe
   acceleration: 0.012,
@@ -314,6 +313,11 @@ function bloc(largeur, hauteur, profondeur, couleur, x, y, z) {
    courbes larges, petits virages en S, retour en épingle
    douce. Pour créer un NOUVEAU circuit, il suffit de
    changer ces points ! */
+/* Le circuit est agrandi proportionnellement : chaque point de
+   passage est multiplié par ECHELLE_CIRCUIT, donc les virages,
+   les lignes droites et tout le tracé gardent exactement les
+   mêmes proportions (2x plus grand pour la route 2x plus large). */
+const ECHELLE_CIRCUIT = 2; // 2 = circuit 2x plus grand (cohérent avec largeurRoute 2x)
 const POINTS_CIRCUIT = [
   [47.6, 0], [48.1, 15.2], [41.5, 27.6], [30.7, 35.2],
   [19.2, 39.6], [8.9, 43.8], [0, 48.8], [-8.2, 52.3],
@@ -321,7 +325,7 @@ const POINTS_CIRCUIT = [
   [-39.6, 0], [-42.7, -11.7], [-41.5, -24.4], [-34.7, -38.3],
   [-23.2, -50.4], [-10.4, -56.7], [0, -55.2], [6.8, -48.1],
   [12, -39.6], [19, -32.1], [29.2, -24.4], [40.2, -14],
-];
+].map(([x, z]) => [x * ECHELLE_CIRCUIT, z * ECHELLE_CIRCUIT]);
 const courbe = new THREE.CatmullRomCurve3(
   POINTS_CIRCUIT.map(([x, z]) => new THREE.Vector3(x, 0, z)),
   true,   // fermé : la boucle revient au départ
@@ -348,7 +352,7 @@ function enregistrerObstacle(x, z, rayon, type, mesh) {
 // P3 : nombre de pavés de la route. 280 suffit largement (le pas
 // entre deux pavés reste court), ça divise par ~2.5 le nombre de
 // meshes par rapport aux 700 d'origine → gros gain de FPS.
-const NB_ECHANTILLONS = 280;
+const NB_ECHANTILLONS = 560; // 2x plus de pavés : le circuit est 2x plus long, la densité de pavés reste la même
 const echantillons = [];
 const tangentes = [];
 for (let i = 0; i < NB_ECHANTILLONS; i++) {
@@ -432,7 +436,7 @@ matSolDessus.onBeforeCompile = (shader) => {
       diffuseColor.rgb *= 0.92 + 0.16 * bruit(vMonde.xz * 0.31); // grain fin`);
 };
 const sol = new THREE.Mesh(
-  new THREE.BoxGeometry(180, 1, 180),
+  new THREE.BoxGeometry(360, 1, 360),
   [
     new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
     new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
@@ -442,7 +446,7 @@ const sol = new THREE.Mesh(
     new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
   ]
 );
-sol.position.set(3, -0.5, -2);
+sol.position.set(6, -0.5, -4);
 sol.receiveShadow = true; // le sol accueille les ombres portées
 scene.add(sol);
 
@@ -641,8 +645,8 @@ matHerbe.onBeforeCompile = (shader) => {
 //    les buffers de matrices/couleurs du InstancedMesh.
 const brins = [];
 for (let i = 0; brins.length < NB_BRINS; i++) {
-  const x = 3 + (Math.random() - 0.5) * 175;
-  const z = -2 + (Math.random() - 0.5) * 175;
+  const x = 6 + (Math.random() - 0.5) * 350;
+  const z = -4 + (Math.random() - 0.5) * 350;
   // pas d'herbe sur la piste ni juste à côté (zone roulable nette)
   if (distanceALaPiste(x, z) < demi + 2.5) continue;
   const hauteur = 0.25 + Math.random() * 0.5;  // hauteurs très variées
@@ -694,8 +698,8 @@ if (FLEURS) {
 
 /* Remplit la prairie : arbres, maisons, vaches */
 for (let essai = 0; essai < 350; essai++) {
-  const x = 3 + (Math.random() - 0.5) * 170;
-  const z = -2 + (Math.random() - 0.5) * 170;
+  const x = 6 + (Math.random() - 0.5) * 340;
+  const z = -4 + (Math.random() - 0.5) * 340;
   const d = distanceALaPiste(x, z);
   const r = Math.random();
   function poser(decor) {
@@ -868,19 +872,16 @@ for (let i = 0; i < 14; i++) {
     nuage.add(t);
   }
   nuage.traverse(e => { e.receiveShadow = false; e.castShadow = false; });
-  nuage.position.set((Math.random() - 0.5) * 300, 48 + Math.random() * 10, (Math.random() - 0.5) * 300);
+  nuage.position.set((Math.random() - 0.5) * 600, 96 + Math.random() * 20, (Math.random() - 0.5) * 600);
   scene.add(nuage);
   nuages.push(nuage);
 }
 
 /* =========================================================
-   6. DIAMANTS À RAMASSER
-   Posés au-dessus de la piste, à intervalles réguliers.
-   On les touche → ils disparaissent et le score monte !
+   6. COMPTEUR DE TOURS + CHRONO
+   (Les diamants ont été supprimés : plus d'objets à ramasser.)
    ========================================================= */
-let score = 0;
 let numTour = 1;
-const scoreElt = document.getElementById('score');
 const tourElt = document.getElementById('tour');
 
 /* ---------- CHRONO DE TOUR ----------
@@ -909,25 +910,6 @@ function majChrono(ms) {
     + '\nMEILLEUR : ' + formaterTemps(meilleurTour);
 }
 majChrono(null);
-
-const diamants = [];
-function creerDiamant(x, y, z) {
-  const g = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({ color: 0x4FC3F7, transparent: true, opacity: 0.9 });
-  g.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.55), mat));
-  g.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.35), new THREE.MeshLambertMaterial({ color: 0xB3E5FC })));
-  g.position.set(x, y, z);
-  g.userData.baseY = y;
-  scene.add(g);
-  diamants.push(g);
-  return g;
-}
-
-// Un diamant tous les ~60 pas, au milieu de la piste
-for (let i = 0; i < NB_ECHANTILLONS; i += 24) { // un diamant tous les ~24 pavés (~12 diamants par tour)
-  const p = echantillons[i];
-  creerDiamant(p.x, 1.4, p.z);
-}
 
 /* =========================================================
    5. CLAVIER + KLAXON CANARD
@@ -1385,27 +1367,10 @@ function update() {
     poule.rotation.x = Math.sin(tMaintenant * 2.5 + poule.phase) * 0.03; // petit picorage idle
   }
 
-  // Diamants : ils tournent, flottent, et se ramassent au contact
-  const t = performance.now() / 1000;
-
   // Nuages : dérive lente en altitude
   for (const n of nuages) {
     n.position.x += 0.01;
     if (n.position.x > 140) n.position.x = -140; // reboucle à l'autre bout
-  }
-
-  for (let i = diamants.length - 1; i >= 0; i--) {
-    const d = diamants[i];
-    d.rotation.y = t * 2;
-    d.position.y = d.userData.baseY + Math.sin(t * 2.5 + i) * 0.25;
-    const dx = d.position.x - voiture.x;
-    const dz = d.position.z - voiture.z;
-    if (dx * dx + dz * dz < 3.2) {
-      scene.remove(d);
-      diamants.splice(i, 1);
-      score++;
-      scoreElt.textContent = `💎 ${score}`;
-    }
   }
 
   // Caméra de poursuite : derrière la voiture, dans son sens
@@ -1447,7 +1412,7 @@ function animer() {
   // Dérive lente des nuages, avec rebouclage une fois hors zone
   for (const n of nuages) {
     n.position.x += VITESSE_NUAGE;
-    if (n.position.x > 180) n.position.x = -180;
+    if (n.position.x > 300) n.position.x = -300;
   }
   // Le skydome suit la caméra : le dégradé reste stable
   skydome.position.copy(camera.position);
