@@ -275,7 +275,9 @@ const CONFIG = {
   acceleration: 0.012,
   freinage: 0.03,
   ralentissement: 0.004,
-  vitesseVirage: 0.06, // vitesse de rotation du pickup
+  vitesseVirage: 0.032, // vitesse de rotation du pickup (réduite : virages plus progressifs)
+  vitesseMonteeVirage: 3.5,   // rapidité à laquelle la direction prend effet (montée douce)
+  vitesseDescenteVirage: 5.0, // rapidité à laquelle la direction se relâche quand on lâche
   vitesseLaterale: 0.22,
 };
 
@@ -1092,6 +1094,8 @@ const posDepart = echantillons[INDICE_DEPART];
 const voiture = {
   x: posDepart.x,
   z: posDepart.z,
+  directionLisse: 0,  // commande de direction lissée (inertie) : -1 .. 1
+  derniereFrame: null,
   cap: Math.atan2(-tangentes[INDICE_DEPART].x, -tangentes[INDICE_DEPART].z), // sens inverse !
   vitesse: 0,
   surPiste: true,
@@ -1255,11 +1259,23 @@ function update() {
     if (voiture.vitesse < 0) voiture.vitesse = Math.min(0, voiture.vitesse + CONFIG.ralentissement);
   }
 
-  // Tourner : les flèches font pivoter le cap du pickup
+  // Tourner : la commande de direction est LISSÉE (inertie).
+  // Au lieu d'appliquer le virage à fond dès la première frame,
+  // la consigne (-1, 0 ou +1) est filtrée : elle monte doucement
+  // quand on appuie (~0.3 s pour atteindre le maximum) et
+  // redescend doucement quand on relâche. Résultat : le pickup
+  // prend son virage progressivement, comme une vraie voiture,
+  // au lieu de pivoter instantanément.
   const facteurVitesse = Math.abs(voiture.vitesse) / CONFIG.vitesseMax; // on tourne moins à l'arrêt
-  let direction = 0;
-  if (touches['ArrowLeft'])  { voiture.cap += CONFIG.vitesseVirage * (voiture.vitesse >= 0 ? 1 : -1) * facteurVitesse; direction = -1; }
-  if (touches['ArrowRight']) { voiture.cap -= CONFIG.vitesseVirage * (voiture.vitesse >= 0 ? 1 : -1) * facteurVitesse; direction = 1; }
+  const consigne = (touches['ArrowLeft'] ? -1 : 0) + (touches['ArrowRight'] ? 1 : 0);
+  const vers = consigne !== 0 ? CONFIG.vitesseMonteeVirage : CONFIG.vitesseDescenteVirage;
+  // interpolation exponentielle vers la consigne (lissée, frame-rate indépendante)
+  const dtVirage = Math.min((performance.now() - (voiture.derniereFrame ?? performance.now())) / 1000, 0.05);
+  voiture.derniereFrame = performance.now();
+  voiture.directionLisse += (consigne - voiture.directionLisse) * Math.min(1, vers * dtVirage);
+  if (Math.abs(voiture.directionLisse) < 0.001) voiture.directionLisse = 0; // évite le résidu infinitésimal
+  const direction = voiture.directionLisse;
+  voiture.cap += direction * CONFIG.vitesseVirage * (voiture.vitesse >= 0 ? 1 : -1) * facteurVitesse;
 
   // Avancer dans la direction du cap
   voiture.x += Math.sin(voiture.cap) * voiture.vitesse;
