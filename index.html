@@ -53,7 +53,7 @@
   #tactile { display: none; }
   body.mobile #tactile {
     display: flex; position: fixed; inset: 0;
-    flex-direction: column;
+    flex-direction: row; align-items: flex-end;
     touch-action: none; user-select: none; -webkit-user-select: none;
     z-index: 5; pointer-events: none; /* le vide laisse passer les clics */
   }
@@ -64,10 +64,11 @@
   body.mobile #tactile .zone {
     display: flex; align-items: flex-end;
     gap: 26px;
-    margin-top: auto; padding: 10px 16px 46px;
+    padding: 10px 16px 46px;
     pointer-events: none;
   }
-  #zoneGauche { justify-content: flex-start; align-self: flex-start; margin-top: auto; }
+  /* Direction calée en BAS À GAUCHE de l'écran */
+  #zoneGauche { justify-content: flex-start; }
   #zoneDroite { justify-content: flex-end; margin-left: auto; }
   /* GROS boutons confortables : 130x130 px de hitbox (= visuel =
      zone tactile, pas de hitbox plus petite que le bouton dessiné).
