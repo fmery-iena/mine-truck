@@ -697,6 +697,19 @@ if (FLEURS) {
 }
 
 /* Remplit la prairie : arbres, maisons, vaches */
+// Deux vaches POSÉES SUR LA ROUTE, au milieu du circuit :
+// une à mi-parcour (opposée à la ligne de départ), l'autre
+// à mi-chemin de celle-ci. Elles se baladent désormais
+// librement, y compris sur la piste !
+{
+  const indices = [Math.floor(NB_ECHANTILLONS * 0.25), Math.floor(NB_ECHANTILLONS * 0.75)];
+  for (const i of indices) {
+    const p = echantillons[i];
+    const v = creerVache(p.x, p.z);
+    activerOmbresPortees(v);
+    scene.add(v);
+  }
+}
 for (let essai = 0; essai < 350; essai++) {
   const x = 6 + (Math.random() - 0.5) * 340;
   const z = -4 + (Math.random() - 0.5) * 340;
@@ -1218,20 +1231,16 @@ function majVaches() {
       const pas = 0.5 * dt; // vitesse lente
       const nx = obs.x + Math.sin(obs.capMarche) * pas;
       const nz = obs.z + Math.cos(obs.capMarche) * pas;
-      // anti-route : le pas ne doit pas approcher la piste
-      if (distanceALaPiste(nx, nz) < demi + 2.5) {
-        obs.etat = 'idle'; // trop près → elle s'arrête et se retourne
+      // Les vaches peuvent maintenant aller partout, y compris
+      // sur la route (plus de restriction anti-route).
+      obs.x = nx; obs.z = nz;
+      obs.mesh.position.set(nx, 0, nz);
+      // rotation douce vers le cap de marche
+      const diff = obs.capMarche - obs.mesh.rotation.y;
+      obs.mesh.rotation.y += diff * Math.min(1, dt * 3);
+      if (obs.minuteur <= 0) {
+        obs.etat = 'idle';
         obs.minuteur = 3 + Math.random() * 7;
-      } else {
-        obs.x = nx; obs.z = nz;
-        obs.mesh.position.set(nx, 0, nz);
-        // rotation douce vers le cap de marche
-        const diff = obs.capMarche - obs.mesh.rotation.y;
-        obs.mesh.rotation.y += diff * Math.min(1, dt * 3);
-        if (obs.minuteur <= 0) {
-          obs.etat = 'idle';
-          obs.minuteur = 3 + Math.random() * 7;
-        }
       }
     }
   }
