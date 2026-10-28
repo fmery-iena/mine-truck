@@ -64,10 +64,10 @@
   body.mobile #tactile .zone {
     display: flex; align-items: flex-end;
     gap: 26px;
-    margin-top: auto; padding: 18px 22px 26px;
+    margin-top: auto; padding: 10px 16px 46px;
     pointer-events: none;
   }
-  #zoneGauche { justify-content: flex-start; }
+  #zoneGauche { justify-content: flex-start; align-self: flex-start; margin-top: auto; }
   #zoneDroite { justify-content: flex-end; margin-left: auto; }
   /* GROS boutons confortables : 130x130 px de hitbox (= visuel =
      zone tactile, pas de hitbox plus petite que le bouton dessiné).
@@ -1267,7 +1267,7 @@ function update() {
   // prend son virage progressivement, comme une vraie voiture,
   // au lieu de pivoter instantanément.
   const facteurVitesse = Math.abs(voiture.vitesse) / CONFIG.vitesseMax; // on tourne moins à l'arrêt
-  const consigne = (touches['ArrowLeft'] ? -1 : 0) + (touches['ArrowRight'] ? 1 : 0);
+  const consigne = (touches['ArrowLeft'] ? 1 : 0) + (touches['ArrowRight'] ? -1 : 0);
   const vers = consigne !== 0 ? CONFIG.vitesseMonteeVirage : CONFIG.vitesseDescenteVirage;
   // interpolation exponentielle vers la consigne (lissée, frame-rate indépendante)
   const dtVirage = Math.min((performance.now() - (voiture.derniereFrame ?? performance.now())) / 1000, 0.05);
