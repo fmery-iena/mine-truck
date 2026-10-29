@@ -282,6 +282,9 @@ const CONFIG = {
   vitesseLaterale: 0.22,
   boostVitesse: 1.30,          // vitesse instantanée quand on roule sur un panneau d'accélération (2.4x la vitesse max !)
   boostDuree: 1.2,             // durée du boost en secondes
+  tremplinVitesseVerticale: 9.0,  // impulsion verticale au décollage (force du saut)
+  tremplinGravite: 14.0,          // gravité pendant le vol (descente progressive)
+  tremplinBoostAtterrissage: 1.0, // boost reçu au moment de retoucher le sol
 };
 
 const HAUTEUR_ROUTE = 0.2;
@@ -571,6 +574,43 @@ function creerZoneBoost(indice) {
 // aux mêmes endroits, pile sur la route.
 creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.20));
 creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.60));
+
+/* --- TREMPLINS : entre les deux zones d'accélération (40% et
+   80% du circuit). Même taille que les accélérateurs (60% de la
+   largeur de route, 6 blocs de long), mais en RAMPE : des blocs
+   violets empilés en escalier + une bande rouge au sommet, bien
+   distinguables de la route et des pads orange.
+   On passe dessus en avançant → décollage, vol balistique
+   (montée puis descente progressives), et BOOST à l'atterrissage. */
+const tremplins = [];
+function creerTremplin(indice) {
+  const p = echantillons[indice];
+  const tangente = tangentes[indice];
+  const angle = Math.atan2(tangente.x, tangente.z);
+
+  const tremplin = new THREE.Group();
+  // Rampe en escalier : 4 marches violettes de plus en plus hautes
+  // (on monte de 0.15 bloc par marche → pente douce et visible)
+  const NB_MARCHES = 4;
+  for (let m = 0; m < NB_MARCHES; m++) {
+    const profondeurMarche = 6 / NB_MARCHES;
+    const hauteurMarche = 0.15 * (m + 1);
+    tremplin.add(bloc(CONFIG.largeurRoute * 0.6, hauteurMarche, profondeurMarche + 0.05,
+      0x7B1FA2, 0, hauteurMarche / 2, -3 + profondeurMarche / 2 + m * profondeurMarche));
+  }
+  // Bande rouge vive au sommet de la rampe : le point de décollage
+  tremplin.add(bloc(CONFIG.largeurRoute * 0.6, 0.1, 0.6, 0xFF1744,
+    0, 0.15 * NB_MARCHES + 0.05, 3 - 0.3));
+  tremplin.position.set(p.x, 0, p.z);
+  tremplin.rotation.y = angle;
+  scene.add(tremplin);
+
+  // Zone de détection (comme les pads d'accélération)
+  tremplins.push({ x: p.x, z: p.z, rayon: CONFIG.largeurRoute * 0.3 });
+}
+
+creerTremplin(Math.floor(NB_ECHANTILLONS * 0.40));
+creerTremplin(Math.floor(NB_ECHANTILLONS * 0.80));
 
 /* =========================================================
    3. LE DÉCOR : ARBRES, MAISONS ET VACHES
@@ -1139,6 +1179,9 @@ const voiture = {
   z: posDepart.z,
   directionLisse: 0,  // commande de direction lissée (inertie) : -1 .. 1
   tempsBoost: 0,      // temps de boost restant (0 = pas de boost)
+  altitude: 0,         // hauteur actuelle pendant le vol (0 = au sol)
+  vitesseVerticale: 0, // vitesse verticale pendant le vol
+  enVol: false,       // vrai pendant un saut de tremplin
   derniereFrame: null,
   cap: Math.atan2(-tangentes[INDICE_DEPART].x, -tangentes[INDICE_DEPART].z), // sens inverse !
   vitesse: 0,
@@ -1300,8 +1343,11 @@ function update() {
   // Déclenché seulement si on avance (pas de boost à l'arrêt ni
   // en marche arrière), et le plafond de vitesse est relevé
   // tant que le boost est actif.
+  const maintenant = performance.now();
+  const dtFrame = Math.min((maintenant - (voiture.derniereFrame ?? maintenant)) / 1000, 0.05);
+  voiture.derniereFrame = maintenant;
   if (voiture.tempsBoost > 0) {
-    voiture.tempsBoost -= (performance.now() - (voiture.derniereFrame ?? performance.now())) / 1000;
+    voiture.tempsBoost -= dtFrame;
   }
   for (const zb of zonesBoost) {
     const dx = voiture.x - zb.x;
@@ -1310,6 +1356,37 @@ function update() {
       voiture.vitesse = CONFIG.boostVitesse;
       voiture.tempsBoost = CONFIG.boostDuree;
       break;
+    }
+  }
+
+  // TREMPLINS : décollage, vol balistique, boost à l'atterrissage.
+  // Au sol, on teste si on roule sur un tremplin (en avançant) →
+  // impulsion verticale. En vol, la gravité tire progressivement
+  // vers le bas : montée douce puis redescente douce (~1.2 s).
+  // À l'atterrissage (altitude repasse sous 0) : boost de relance.
+  if (!voiture.enVol) {
+    for (const tr of tremplins) {
+      const dx = voiture.x - tr.x;
+      const dz = voiture.z - tr.z;
+      if (voiture.vitesse > 0 && dx * dx + dz * dz < tr.rayon * tr.rayon) {
+        voiture.enVol = true;
+        voiture.vitesseVerticale = CONFIG.tremplinVitesseVerticale;
+        voiture.tempsBoost = 0; // le boost en cours est remplacé par le vol
+        break;
+      }
+    }
+  } else {
+    // physique du vol : la vitesse verticale diminue avec la gravité,
+    // l'altitude suit. Fluide et indépendant du frame-rate.
+    voiture.vitesseVerticale -= CONFIG.tremplinGravite * dtFrame;
+    voiture.altitude += voiture.vitesseVerticale * dtFrame;
+    if (voiture.altitude <= 0) {
+      // Atterrissage : retour au sol + boost de relance bien marqué
+      voiture.altitude = 0;
+      voiture.enVol = false;
+      voiture.vitesseVerticale = 0;
+      voiture.vitesse = CONFIG.tremplinBoostAtterrissage; // ~2x la vitesse max
+      voiture.tempsBoost = CONFIG.boostDuree;
     }
   }
 
@@ -1340,9 +1417,7 @@ function update() {
   const consigne = (touches['ArrowLeft'] ? 1 : 0) + (touches['ArrowRight'] ? -1 : 0);
   const vers = consigne !== 0 ? CONFIG.vitesseMonteeVirage : CONFIG.vitesseDescenteVirage;
   // interpolation exponentielle vers la consigne (lissée, frame-rate indépendante)
-  const dtVirage = Math.min((performance.now() - (voiture.derniereFrame ?? performance.now())) / 1000, 0.05);
-  voiture.derniereFrame = performance.now();
-  voiture.directionLisse += (consigne - voiture.directionLisse) * Math.min(1, vers * dtVirage);
+  voiture.directionLisse += (consigne - voiture.directionLisse) * Math.min(1, vers * dtFrame);
   if (Math.abs(voiture.directionLisse) < 0.001) voiture.directionLisse = 0; // évite le résidu infinitésimal
   const direction = voiture.directionLisse;
   voiture.cap += direction * CONFIG.vitesseVirage * (voiture.vitesse >= 0 ? 1 : -1) * facteurVitesse;
@@ -1447,7 +1522,9 @@ function update() {
 
 
   // Placer la voiture (légère inclinaison dans les virages)
-  pickup.position.set(voiture.x, HAUTEUR_ROUTE, voiture.z);
+  pickup.position.set(voiture.x, HAUTEUR_ROUTE + voiture.altitude, voiture.z);
+  // En vol : petite inclinaison avant au décollage, puis retour à plat
+  pickup.rotation.x += ((voiture.enVol ? -0.15 : 0) - pickup.rotation.x) * 0.15;
   pickup.rotation.y = voiture.cap + Math.PI; // l'avant du pickup regarde vers -z
   pickup.rotation.z = direction * 0.08 * facteurVitesse;
 
@@ -1472,7 +1549,7 @@ function update() {
 
   // Caméra de poursuite : derrière la voiture, dans son sens
   const hauteurCam = 4.5, distanceCam = 12;
-  const cibleCam = new THREE.Vector3(voiture.x, 1.5, voiture.z);
+  const cibleCam = new THREE.Vector3(voiture.x, 1.5 + voiture.altitude * 0.8, voiture.z);
   const posCamVoulue = new THREE.Vector3(
     voiture.x - Math.sin(voiture.cap) * distanceCam,
     hauteurCam,
