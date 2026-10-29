@@ -523,18 +523,6 @@ for (let i = 0; i < NB_ECHANTILLONS; i++) {
     groupeRoute.add(milieu);
   }
 
-  // Barrières bois de chaque côté — 1 pavé sur 12 seulement
-  // (moitié moins qu'avant pour laisser la place libre de
-  // circuler et alléger le rendu)
-  if (i % 12 === 0) {
-    for (const cote of [-1, 1]) {
-      const bx = p.x + Math.cos(angle) * demi * cote;
-      const bz = p.z - Math.sin(angle) * demi * cote;
-      groupeRoute.add(bloc(0.5, 1.2, 0.5, 0x9B7653, bx, 0.65, bz));
-      groupeRoute.add(bloc(0.3, 0.25, 0.6, 0xF5F5F5, bx, 1.15, bz));
-      enregistrerObstacle(bx, bz, 0.35, 'solide', null); // poteau
-    }
-  }
 }
 
 /* --- Ligne de départ/arrivée en damier (au début de la boucle) --- */
