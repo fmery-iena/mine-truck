@@ -465,6 +465,46 @@ function activerOmbresPortees(objet) {
 }
 
 /* --- Construction de la route en pavés le long de la courbe --- */
+
+/* Texture d'asphalte stylisée : comme pour l'herbe, on génère
+   un petit canvas pixel-art au chargement (16x16 px, filtrage
+   Nearest → look « blocs Minecraft ») et on le partage entre
+   TOUS les pavés (une seule texture en mémoire, zéro requête).
+   Gris de base + petits grains plus clairs/foncés aléatoires
+   + de rares « cailloux » clairs : du relief visuel discret,
+   cohérent avec le style voxel, quasi gratuit en perf. */
+function creerTextureAsphalte() {
+  const T = 16;
+  const cv = document.createElement('canvas');
+  cv.width = T; cv.height = T;
+  const c = cv.getContext('2d');
+  const GRIS = [0x3F, 0x3F, 0x46]; // couleur de base = COULEUR_ROUTE
+  c.fillStyle = 'rgb(63,63,70)';
+  c.fillRect(0, 0, T, T);
+  for (let y = 0; y < T; y++) {
+    for (let x = 0; x < T; x++) {
+      const r = Math.random();
+      if (r < 0.30) c.fillStyle = 'rgb(70,70,78)';      // grain clair
+      else if (r < 0.55) c.fillStyle = 'rgb(56,56,62)'; // grain foncé
+      else if (r < 0.58) c.fillStyle = 'rgb(88,88,96)';  // caillou clair (rare)
+      else continue;
+      c.fillRect(x, y, 1, 1);
+    }
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.magFilter = THREE.NearestFilter;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+const textureAsphalte = creerTextureAsphalte();
+/* UN SEUL matériau texturé partagé pour tous les pavés (le
+   cache de matériaux par couleur ne connaît pas les textures,
+   on le crée donc ici à la main). */
+const matériauAsphalte = new THREE.MeshLambertMaterial({ map: textureAsphalte });
+// Variante « usée » : même texture, légèrement plus sombre, pour
+// l'alternance discrète des sections de la route.
+const matériauAsphalteSombre = new THREE.MeshLambertMaterial({ map: textureAsphalte, color: 0xCCCCCC });
+
 const groupeRoute = new THREE.Group();
 const PAS = 2; // distance entre deux pavés
 const demi = CONFIG.largeurRoute / 2;
@@ -483,23 +523,36 @@ for (let i = 0; i < NB_ECHANTILLONS; i++) {
     groupeRoute.add(accot);
   }
 
-  // Pavé d'asphalte orienté dans le sens de la piste
-  const pave = bloc(CONFIG.largeurRoute, 0.3, PAS + 0.6, COULEUR_ROUTE, p.x, 0.05, p.z);
+  // Pavé d'asphalte texturé, orienté dans le sens de la piste.
+  // Variation discrète par section : un pavé sur 9 est très
+  // légèrement plus sombre (rubéole d'usure de la route), ce qui
+  // casse l'uniformité sans attirer l'œil.
+  const pave = bloc(CONFIG.largeurRoute, 0.3, PAS + 0.6, 0xFFFFFF, p.x, 0.05, p.z);
+  pave.material = (i % 9 === 4) ? matériauAsphalteSombre : matériauAsphalte;
   pave.rotation.y = angle;
   groupeRoute.add(pave);
 
-  // Lignes blanches des bords
+  // Bordures : une bande continue ÉPAISSE (0.7) légèrement en
+  // retrait, suivie d'une fine bande blanche toute neuve → effet
+  // « bord de route usé puis repeint », très lisible.
   for (const cote of [-1, 1]) {
-    const ligne = bloc(0.3, 0.06, PAS + 0.6, COULEUR_LIGNE,
-      p.x + Math.cos(angle) * (demi - 0.6) * cote, HAUTEUR_ROUTE + 0.03,
-      p.z - Math.sin(angle) * (demi - 0.6) * cote);
+    const bande = bloc(0.7, 0.06, PAS + 0.6, 0xD6D3CE,
+      p.x + Math.cos(angle) * (demi - 0.45) * cote, HAUTEUR_ROUTE + 0.03,
+      p.z - Math.sin(angle) * (demi - 0.45) * cote);
+    bande.rotation.y = angle;
+    groupeRoute.add(bande);
+    const ligne = bloc(0.25, 0.06, PAS + 0.6, COULEUR_LIGNE,
+      p.x + Math.cos(angle) * (demi - 1.1) * cote, HAUTEUR_ROUTE + 0.04,
+      p.z - Math.sin(angle) * (demi - 1.1) * cote);
     ligne.rotation.y = angle;
     groupeRoute.add(ligne);
   }
 
-  // Pointillés au milieu (1 pavé sur 3)
-  if (i % 2 === 0) { // pointillés : 1 pavé sur 2 (avec 280 échantillons)
-    const milieu = bloc(0.35, 0.06, 1.2, COULEUR_LIGNE, p.x, HAUTEUR_ROUTE + 0.03, p.z);
+  // Pointillés du milieu : traits blancs nets, allongés
+  // (1.8 au lieu de 1.2) et posés en quinconce léger pour un
+  // rendu régulier du pointillé le long de la courbe.
+  if (i % 2 === 0) {
+    const milieu = bloc(0.35, 0.06, 1.8, COULEUR_LIGNE, p.x, HAUTEUR_ROUTE + 0.04, p.z);
     milieu.rotation.y = angle;
     groupeRoute.add(milieu);
   }
