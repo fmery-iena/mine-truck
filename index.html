@@ -592,30 +592,39 @@ creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.60));
    On passe dessus en avançant → décollage, vol balistique
    (montée puis descente progressives), et BOOST à l'atterrissage. */
 const tremplins = [];
+const TREMPLIN_LONGUEUR = 12;                    // rampe bien plus longue : on grimpe dessus avant de décoller
+const TREMPLIN_LARGEUR = CONFIG.largeurRoute * 0.45; // moins large : il faut viser un peu
 function creerTremplin(indice) {
   const p = echantillons[indice];
   const tangente = tangentes[indice];
   const angle = Math.atan2(tangente.x, tangente.z);
 
   const tremplin = new THREE.Group();
-  // Rampe en escalier : 4 marches violettes de plus en plus hautes
-  // (on monte de 0.15 bloc par marche → pente douce et visible)
-  const NB_MARCHES = 4;
+  // Rampe en escalier : 8 marches violettes de plus en plus
+  // hautes sur 12 blocs de long → on monte vraiment dessus
+  // (pente douce, montée progressive bien visible).
+  const NB_MARCHES = 8;
+  const hauteurMax = 0.9;
   for (let m = 0; m < NB_MARCHES; m++) {
-    const profondeurMarche = 6 / NB_MARCHES;
-    const hauteurMarche = 0.15 * (m + 1);
-    tremplin.add(bloc(CONFIG.largeurRoute * 0.6, hauteurMarche, profondeurMarche + 0.05,
-      0x7B1FA2, 0, hauteurMarche / 2, -3 + profondeurMarche / 2 + m * profondeurMarche));
+    const profondeurMarche = TREMPLIN_LONGUEUR / NB_MARCHES;
+    const hauteurMarche = (hauteurMax / NB_MARCHES) * (m + 1);
+    tremplin.add(bloc(TREMPLIN_LARGEUR, hauteurMarche, profondeurMarche + 0.05,
+      0x7B1FA2, 0, hauteurMarche / 2, -TREMPLIN_LONGUEUR / 2 + profondeurMarche / 2 + m * profondeurMarche));
   }
   // Bande rouge vive au sommet de la rampe : le point de décollage
-  tremplin.add(bloc(CONFIG.largeurRoute * 0.6, 0.1, 0.6, 0xFF1744,
-    0, 0.15 * NB_MARCHES + 0.05, 3 - 0.3));
+  tremplin.add(bloc(TREMPLIN_LARGEUR, 0.1, 0.8, 0xFF1744,
+    0, hauteurMax + 0.05, TREMPLIN_LONGUEUR / 2 - 0.4));
   tremplin.position.set(p.x, 0, p.z);
   tremplin.rotation.y = angle;
   scene.add(tremplin);
 
-  // Zone de détection (comme les pads d'accélération)
-  tremplins.push({ x: p.x, z: p.z, rayon: CONFIG.largeurRoute * 0.3 });
+  // Décollage au SOMMET de la rampe : la voiture doit la remonter
+  // presque entièrement avant de sauter. On enregistre la
+  // position du sommet (décalée le long de la tangente) et une
+  // petite zone autour → décollage au bon endroit, pas avant.
+  const sx = p.x + tangente.x * (TREMPLIN_LONGUEUR / 2 - 1);
+  const sz = p.z + tangente.z * (TREMPLIN_LONGUEUR / 2 - 1);
+  tremplins.push({ x: sx, z: sz, rayon: 2.2 });
 }
 
 creerTremplin(Math.floor(NB_ECHANTILLONS * 0.40));
@@ -796,7 +805,7 @@ if (FLEURS) {
 // à mi-chemin de celle-ci. Elles se baladent désormais
 // librement, y compris sur la piste !
 {
-  const indices = [Math.floor(NB_ECHANTILLONS * 0.25), Math.floor(NB_ECHANTILLONS * 0.75)];
+  const indices = [Math.floor(NB_ECHANTILLONS * 0.25), Math.floor(NB_ECHANTILLONS * 0.75), Math.floor(NB_ECHANTILLONS * 0.90)];
   for (const i of indices) {
     const p = echantillons[i];
     const v = creerVache(p.x, p.z);
