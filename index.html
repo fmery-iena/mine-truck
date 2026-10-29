@@ -288,7 +288,7 @@ const CONFIG = {
 };
 
 const HAUTEUR_ROUTE = 0.2;
-const COULEUR_ROUTE = 0x3F3F46;
+const COULEUR_ROUTE = 0x26262C; // anthracite foncé (assombri : la route doit rester sombre)
 const COULEUR_LIGNE = 0xE0E0E0;
 const COULEUR_ACCOT = 0x8F8770;
 
@@ -478,17 +478,20 @@ function creerTextureAsphalte() {
   const cv = document.createElement('canvas');
   cv.width = T; cv.height = T;
   const c = cv.getContext('2d');
-  const GRIS = [0x3F, 0x3F, 0x46]; // couleur de base = COULEUR_ROUTE
-  c.fillStyle = 'rgb(63,63,70)';
+  // Base bien plus foncée (anthracite) : la route doit rester
+  // sombre pour que les marquages blancs/orange/violet ressortent.
+  c.fillStyle = 'rgb(38,38,44)';
   c.fillRect(0, 0, T, T);
-  for (let y = 0; y < T; y++) {
-    for (let x = 0; x < T; x++) {
+  // Motif en BLOCS 2x2 réguliers (pas de pixels isolés) :
+  // quelques pavés 2x2 légèrement plus clairs ou plus foncés,
+  // disposés en damier régulier → relief discret qui ne
+  // scintille PAS (chaque bloc reste lisible même en mouvement).
+  const nuances = ['rgb(44,44,50)', 'rgb(33,33,38)'];
+  for (let y = 0; y < T; y += 2) {
+    for (let x = 0; x < T; x += 2) {
       const r = Math.random();
-      if (r < 0.30) c.fillStyle = 'rgb(70,70,78)';      // grain clair
-      else if (r < 0.55) c.fillStyle = 'rgb(56,56,62)'; // grain foncé
-      else if (r < 0.58) c.fillStyle = 'rgb(88,88,96)';  // caillou clair (rare)
-      else continue;
-      c.fillRect(x, y, 1, 1);
+      if (r < 0.30) { c.fillStyle = nuances[0]; c.fillRect(x, y, 2, 2); }
+      else if (r < 0.55) { c.fillStyle = nuances[1]; c.fillRect(x, y, 2, 2); }
     }
   }
   const tex = new THREE.CanvasTexture(cv);
@@ -503,7 +506,7 @@ const textureAsphalte = creerTextureAsphalte();
 const matériauAsphalte = new THREE.MeshLambertMaterial({ map: textureAsphalte });
 // Variante « usée » : même texture, légèrement plus sombre, pour
 // l'alternance discrète des sections de la route.
-const matériauAsphalteSombre = new THREE.MeshLambertMaterial({ map: textureAsphalte, color: 0xCCCCCC });
+const matériauAsphalteSombre = new THREE.MeshLambertMaterial({ map: textureAsphalte, color: 0xE0E0E0 });
 
 const groupeRoute = new THREE.Group();
 const PAS = 2; // distance entre deux pavés
