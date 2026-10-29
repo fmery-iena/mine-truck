@@ -600,30 +600,32 @@ function creerTremplin(indice) {
   const angle = Math.atan2(tangente.x, tangente.z);
 
   const tremplin = new THREE.Group();
-  // Rampe en escalier : 8 marches violettes de plus en plus
-  // hautes sur 12 blocs de long → on monte vraiment dessus
-  // (pente douce, montée progressive bien visible).
+  // ATTENTION au sens de course : on roule À L'INVERSE de la
+  // tangente (voir cap = atan2(-t, -t)). La rampe est donc
+  // construite « à l'envers » : la plus BASSE marche est du côté
+  // tangent (+z local) où on arrive, et les marches montent vers
+  // -z local, le sens de course. Bande rouge = sommet = décollage.
   const NB_MARCHES = 8;
   const hauteurMax = 0.9;
   for (let m = 0; m < NB_MARCHES; m++) {
     const profondeurMarche = TREMPLIN_LONGUEUR / NB_MARCHES;
     const hauteurMarche = (hauteurMax / NB_MARCHES) * (m + 1);
+    // m=0 → marche la plus basse, posée au bout +z (côté arrivée)
     tremplin.add(bloc(TREMPLIN_LARGEUR, hauteurMarche, profondeurMarche + 0.05,
-      0x7B1FA2, 0, hauteurMarche / 2, -TREMPLIN_LONGUEUR / 2 + profondeurMarche / 2 + m * profondeurMarche));
+      0x7B1FA2, 0, hauteurMarche / 2, TREMPLIN_LONGUEUR / 2 - profondeurMarche / 2 - m * profondeurMarche));
   }
   // Bande rouge vive au sommet de la rampe : le point de décollage
   tremplin.add(bloc(TREMPLIN_LARGEUR, 0.1, 0.8, 0xFF1744,
-    0, hauteurMax + 0.05, TREMPLIN_LONGUEUR / 2 - 0.4));
+    0, hauteurMax + 0.05, -TREMPLIN_LONGUEUR / 2 + 0.4));
   tremplin.position.set(p.x, 0, p.z);
   tremplin.rotation.y = angle;
   scene.add(tremplin);
 
-  // Décollage au SOMMET de la rampe : la voiture doit la remonter
-  // presque entièrement avant de sauter. On enregistre la
-  // position du sommet (décalée le long de la tangente) et une
-  // petite zone autour → décollage au bon endroit, pas avant.
-  const sx = p.x + tangente.x * (TREMPLIN_LONGUEUR / 2 - 1);
-  const sz = p.z + tangente.z * (TREMPLIN_LONGUEUR / 2 - 1);
+  // Décollage au SOMMET de la rampe, dans le SENS DE COURSE
+  // (inverse de la tangente) : la voiture remonte toute la
+  // rampe puis saute au niveau de la bande rouge.
+  const sx = p.x - tangente.x * (TREMPLIN_LONGUEUR / 2 - 1);
+  const sz = p.z - tangente.z * (TREMPLIN_LONGUEUR / 2 - 1);
   tremplins.push({ x: sx, z: sz, rayon: 2.2 });
 }
 
