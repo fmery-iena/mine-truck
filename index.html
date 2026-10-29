@@ -280,8 +280,8 @@ const CONFIG = {
   vitesseMonteeVirage: 3.5,   // rapidité à laquelle la direction prend effet (montée douce)
   vitesseDescenteVirage: 5.0, // rapidité à laquelle la direction se relâche quand on lâche
   vitesseLaterale: 0.22,
-  boostVitesse: 1.05,          // vitesse instantanée quand on roule sur un panneau d'accélération
-  boostDuree: 1.0,             // durée du boost en secondes
+  boostVitesse: 1.30,          // vitesse instantanée quand on roule sur un panneau d'accélération (2.4x la vitesse max !)
+  boostDuree: 1.2,             // durée du boost en secondes
 };
 
 const HAUTEUR_ROUTE = 0.2;
@@ -1313,15 +1313,20 @@ function update() {
     }
   }
 
-  // Accélérer / freiner / ralentir
-  if (touches['ArrowUp'])   voiture.vitesse = Math.min(CONFIG.vitesseMax, voiture.vitesse + CONFIG.acceleration);
-  if (touches['ArrowDown']) voiture.vitesse = Math.max(-CONFIG.vitesseMax * 0.5, voiture.vitesse - CONFIG.freinage);
-  if (!touches['ArrowUp'] && !touches['ArrowDown']) {
-    // Boost actif : pas de ralentissement, il tient jusqu'au bout
-    if (voiture.tempsBoost <= 0) {
+  // Accélérer / freiner / ralentir — SAUF pendant le boost : la
+  // pédale de gaz normal plafonne à vitesseMax, ce qui écraserait
+  // instantanément le boost. Pendant le boost, la vitesse est
+  // gérée uniquement par le chrono du boost (et le frein reste
+  // dispo pour l'annuler si besoin).
+  if (voiture.tempsBoost <= 0) {
+    if (touches['ArrowUp'])   voiture.vitesse = Math.min(CONFIG.vitesseMax, voiture.vitesse + CONFIG.acceleration);
+    if (touches['ArrowDown']) voiture.vitesse = Math.max(-CONFIG.vitesseMax * 0.5, voiture.vitesse - CONFIG.freinage);
+    if (!touches['ArrowUp'] && !touches['ArrowDown']) {
       if (voiture.vitesse > 0) voiture.vitesse = Math.max(0, voiture.vitesse - CONFIG.ralentissement);
       if (voiture.vitesse < 0) voiture.vitesse = Math.min(0, voiture.vitesse + CONFIG.ralentissement);
     }
+  } else if (touches['ArrowDown']) {
+    voiture.tempsBoost = 0;  // freiner pendant le boost l'annule
   }
 
   // Tourner : la commande de direction est LISSÉE (inertie).
@@ -1475,6 +1480,11 @@ function update() {
   );
   camera.position.lerp(posCamVoulue, 0.08);
   camera.lookAt(cibleCam);
+  // Effet de vitesse : pendant le boost, la caméra élargit son
+  // champ de vision (sensation d'accélération très marquée).
+  const fovCible = 60 + (voiture.tempsBoost > 0 ? 15 : 0);
+  camera.fov += (fovCible - camera.fov) * 0.1;
+  camera.updateProjectionMatrix();
 }
 
 /* ---------- COMPTEUR FPS (bas à gauche) ----------
