@@ -285,6 +285,8 @@ const CONFIG = {
   tremplinVitesseVerticale: 9.0,  // impulsion verticale au décollage (force du saut)
   tremplinGravite: 14.0,          // gravité pendant le vol (descente progressive)
   tremplinBoostAtterrissage: 1.0, // boost reçu au moment de retoucher le sol
+  spinDuree: 1.0,              // durée du tour sur soi-même après un choc de vache (s)
+  spinTours: 1.0,              // nombre de tours complets (1 = 360°)
 };
 
 const HAUTEUR_ROUTE = 0.2;
@@ -1189,6 +1191,8 @@ const voiture = {
   altitude: 0,         // hauteur actuelle pendant le vol (0 = au sol)
   vitesseVerticale: 0, // vitesse verticale pendant le vol
   enVol: false,       // vrai pendant un saut de tremplin
+  tempsSpin: 0,       // temps restant de tour sur soi-même (choc de vache)
+  capDeplacement: 0,  // cap de glissade pendant le spin (le châssis tourne, pas la trajectoire)
   derniereFrame: null,
   cap: Math.atan2(-tangentes[INDICE_DEPART].x, -tangentes[INDICE_DEPART].z), // sens inverse !
   vitesse: 0,
@@ -1366,6 +1370,16 @@ function update() {
     }
   }
 
+  // SPIN (choc de vache) : la voiture tourne sur elle-même —
+  // le cap balaie un tour complet en spinDuree secondes, la
+  // vitesse est amortie pendant la vrille. Une fois fini, on
+  // repart dans le sens d'origine (360° = retour au même cap).
+  if (voiture.tempsSpin > 0) {
+    voiture.tempsSpin -= dtFrame;
+    voiture.cap += (CONFIG.spinTours * Math.PI * 2 / CONFIG.spinDuree) * dtFrame;
+    voiture.vitesse *= Math.pow(0.05, dtFrame); // amortit fort mais garde un peu d'élan
+  }
+
   // TREMPLINS : décollage, vol balistique, boost à l'atterrissage.
   // Au sol, on teste si on roule sur un tremplin (en avançant) →
   // impulsion verticale. En vol, la gravité tire progressivement
@@ -1429,9 +1443,11 @@ function update() {
   const direction = voiture.directionLisse;
   voiture.cap += direction * CONFIG.vitesseVirage * (voiture.vitesse >= 0 ? 1 : -1) * facteurVitesse;
 
-  // Avancer dans la direction du cap
-  voiture.x += Math.sin(voiture.cap) * voiture.vitesse;
-  voiture.z += Math.cos(voiture.cap) * voiture.vitesse;
+  // Avancer : pendant le spin, la trajectoire reste droite
+  // (capDeplacement) alors que le châssis tourne sur lui-même.
+  const capDeplacement = voiture.tempsSpin > 0 ? voiture.capDeplacement : voiture.cap;
+  voiture.x += Math.sin(capDeplacement) * voiture.vitesse;
+  voiture.z += Math.cos(capDeplacement) * voiture.vitesse;
 
   // --- COLLISIONS ---
   // La voiture est un cercle (rayon 1.8). Contre un obstacle
@@ -1455,7 +1471,13 @@ function update() {
         obs.x -= nx * poussee;
         obs.z -= nz * poussee;
         obs.mesh.position.set(obs.x, 0, obs.z);
-        voiture.vitesse *= 0.9; // on freine à peine
+        voiture.vitesse *= 0.5; // le choc freine nettement
+        // TOUR SUR SOI-MÊME façon Mario Kart : le pickup part
+        // en toupie pendant spinDuree secondes (un tour complet).
+        if (voiture.tempsSpin <= 0) {
+          voiture.tempsSpin = CONFIG.spinDuree;
+          voiture.capDeplacement = voiture.cap; // on glisse tout droit pendant la vrille
+        }
         meuh();
       } else {
         // SOLIDE — APPROCHE A (glissement) :
