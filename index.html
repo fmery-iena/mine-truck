@@ -1377,7 +1377,10 @@ function update() {
   if (voiture.tempsSpin > 0) {
     voiture.tempsSpin -= dtFrame;
     voiture.cap += (CONFIG.spinTours * Math.PI * 2 / CONFIG.spinDuree) * dtFrame;
-    voiture.vitesse *= Math.pow(0.05, dtFrame); // amortit fort mais garde un peu d'élan
+    // On garde une vitesse de glissade : la voiture continue
+    // de s'ÉLOIGNER de la vache pendant la vrille (sinon on
+    // reste dessus et on la re-percute en boucle).
+    voiture.vitesse = CONFIG.vitesseMax * 0.6;
   }
 
   // TREMPLINS : décollage, vol balistique, boost à l'atterrissage.
@@ -1579,10 +1582,11 @@ function update() {
   // Caméra de poursuite : derrière la voiture, dans son sens
   const hauteurCam = 4.5, distanceCam = 12;
   const cibleCam = new THREE.Vector3(voiture.x, 1.5 + voiture.altitude * 0.8, voiture.z);
+  const capCam = voiture.tempsSpin > 0 ? voiture.capDeplacement : voiture.cap;
   const posCamVoulue = new THREE.Vector3(
-    voiture.x - Math.sin(voiture.cap) * distanceCam,
+    voiture.x - Math.sin(capCam) * distanceCam,
     hauteurCam,
-    voiture.z - Math.cos(voiture.cap) * distanceCam
+    voiture.z - Math.cos(capCam) * distanceCam
   );
   camera.position.lerp(posCamVoulue, 0.08);
   camera.lookAt(cibleCam);
