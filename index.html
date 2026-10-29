@@ -280,6 +280,8 @@ const CONFIG = {
   vitesseMonteeVirage: 3.5,   // rapidité à laquelle la direction prend effet (montée douce)
   vitesseDescenteVirage: 5.0, // rapidité à laquelle la direction se relâche quand on lâche
   vitesseLaterale: 0.22,
+  boostVitesse: 1.05,          // vitesse instantanée quand on roule sur un panneau d'accélération
+  boostDuree: 1.0,             // durée du boost en secondes
 };
 
 const HAUTEUR_ROUTE = 0.2;
@@ -529,6 +531,46 @@ ligneDepart.rotation.y = angleDepart;
 groupeRoute.add(ligneDepart);
 
 scene.add(groupeRoute);
+
+/* =========================================================
+   2ter. ZONES D'ACCÉLÉRATION (boost pads, façon Mario Kart)
+   Des panneaux orange vif posés SUR la route avec des
+   chevrons blancs qui indiquent le sens. On roule dessus →
+   accélération instantanée pendant ~1 seconde.
+   Placés au début d'une ligne droite : on sort du boost
+   avec de l'élan pour attaquer la droite qui suit.
+   ========================================================= */
+const zonesBoost = [];
+function creerZoneBoost(indice) {
+  const p = echantillons[indice];
+  const tangente = tangentes[indice];
+  const angle = Math.atan2(tangente.x, tangente.z);
+
+  const zone = new THREE.Group();
+  // Plateau orange vif légèrement au-dessus de la route (repérable au premier coup d'œil)
+  zone.add(bloc(CONFIG.largeurRoute * 0.6, 0.06, 6, 0xFF8F00, 0, HAUTEUR_ROUTE + 0.04, 0));
+  // Chevrons blancs : 3 rangées de flèches pointant dans le sens de la course
+  for (let rangée = 0; rangée < 3; rangée++) {
+    const z = -2 + rangée * 2;
+    for (const cote of [-1, 1]) {
+      const chevron = bloc(1.4, 0.06, 0.5, 0xFFFFFF, cote * 2.2, HAUTEUR_ROUTE + 0.07, z);
+      chevron.rotation.y = cote * 0.5; // incliné pour former le V du chevron
+      zone.add(chevron);
+    }
+  }
+  zone.position.set(p.x, 0, p.z);
+  zone.rotation.y = angle;
+  scene.add(zone);
+
+  // Enregistre la zone pour la détection : position monde + rayon
+  zonesBoost.push({ x: p.x, z: p.z, rayon: CONFIG.largeurRoute * 0.3 });
+}
+
+// Deux panneaux : à 20% du circuit (attaque de la grande droite)
+// et à 60% (relance avant l'épingle). Indices fixes → toujours
+// aux mêmes endroits, pile sur la route.
+creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.20));
+creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.60));
 
 /* =========================================================
    3. LE DÉCOR : ARBRES, MAISONS ET VACHES
@@ -1096,6 +1138,7 @@ const voiture = {
   x: posDepart.x,
   z: posDepart.z,
   directionLisse: 0,  // commande de direction lissée (inertie) : -1 .. 1
+  tempsBoost: 0,      // temps de boost restant (0 = pas de boost)
   derniereFrame: null,
   cap: Math.atan2(-tangentes[INDICE_DEPART].x, -tangentes[INDICE_DEPART].z), // sens inverse !
   vitesse: 0,
@@ -1252,12 +1295,33 @@ function majVaches() {
 }
 
 function update() {
+  // BOOST : si on roule sur un panneau d'accélération, la vitesse
+  // saute instantanément à boostVitesse pendant boostDuree s.
+  // Déclenché seulement si on avance (pas de boost à l'arrêt ni
+  // en marche arrière), et le plafond de vitesse est relevé
+  // tant que le boost est actif.
+  if (voiture.tempsBoost > 0) {
+    voiture.tempsBoost -= (performance.now() - (voiture.derniereFrame ?? performance.now())) / 1000;
+  }
+  for (const zb of zonesBoost) {
+    const dx = voiture.x - zb.x;
+    const dz = voiture.z - zb.z;
+    if (voiture.vitesse > 0 && dx * dx + dz * dz < zb.rayon * zb.rayon) {
+      voiture.vitesse = CONFIG.boostVitesse;
+      voiture.tempsBoost = CONFIG.boostDuree;
+      break;
+    }
+  }
+
   // Accélérer / freiner / ralentir
   if (touches['ArrowUp'])   voiture.vitesse = Math.min(CONFIG.vitesseMax, voiture.vitesse + CONFIG.acceleration);
   if (touches['ArrowDown']) voiture.vitesse = Math.max(-CONFIG.vitesseMax * 0.5, voiture.vitesse - CONFIG.freinage);
   if (!touches['ArrowUp'] && !touches['ArrowDown']) {
-    if (voiture.vitesse > 0) voiture.vitesse = Math.max(0, voiture.vitesse - CONFIG.ralentissement);
-    if (voiture.vitesse < 0) voiture.vitesse = Math.min(0, voiture.vitesse + CONFIG.ralentissement);
+    // Boost actif : pas de ralentissement, il tient jusqu'au bout
+    if (voiture.tempsBoost <= 0) {
+      if (voiture.vitesse > 0) voiture.vitesse = Math.max(0, voiture.vitesse - CONFIG.ralentissement);
+      if (voiture.vitesse < 0) voiture.vitesse = Math.min(0, voiture.vitesse + CONFIG.ralentissement);
+    }
   }
 
   // Tourner : la commande de direction est LISSÉE (inertie).
@@ -1337,7 +1401,9 @@ function update() {
   voiture.surPiste = proche.distance < demi + 1.2;
 
   // Dans l'herbe : la vitesse est limitée (et on ralentit vite)
-  const vitessePlafond = voiture.surPiste ? CONFIG.vitesseMax : CONFIG.vitesseHerbe;
+  const vitessePlafond = voiture.tempsBoost > 0
+    ? CONFIG.boostVitesse  // boost actif : plafond temporairement relevé
+    : (voiture.surPiste ? CONFIG.vitesseMax : CONFIG.vitesseHerbe);
   if (voiture.vitesse > vitessePlafond) {
     voiture.vitesse = Math.max(vitessePlafond, voiture.vitesse - 0.02);
   }
