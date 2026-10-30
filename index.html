@@ -329,43 +329,63 @@ function bloc(largeur, hauteur, profondeur, couleur, x, y, z) {
    les lignes droites et tout le tracé gardent exactement les
    mêmes proportions (2x plus grand pour la route 2x plus large). */
 const ECHELLE_CIRCUIT = 2; // 2 = circuit 2x plus grand (cohérent avec largeurRoute 2x)
-/* --- CIRCUIT « MEEUH MEEUH » v2 : GÉNÉRATION POLAIRE.
-   L'ancien tracé (points posés à la main) s'AUTO-CROISAIT :
-   des brins de piste passaient à 2-13 blocs l'un de l'autre
-   alors que la route fait 20 de large → pavés superposés,
-   route « cassée », discontinuités visibles.
+/* --- CIRCUIT « PRAIRIE MEUH MEUH » v3 : GÉNÉRATION POLAIRE PAR SECTIONS.
+   Le tracé est défini en COORDONNÉES POLAIRES : un rayon de base
+   R=160 + des ondulations locales (fenêtres triangulaires centrées
+   sur une fraction f du tour, 0 = ligne de départ). Une courbe
+   polaire r(f) > 0 ne PEUT PAS s'auto-croiser : la boucle est
+   continue et fermée par construction.
 
-   Ici le tracé est défini en COORDONNÉES POLAIRES : un rayon
-   de base R=160 auquel on ajoute des ondulations locales
-   (fenêtres) — serpentin en S vers θ≈1.9, bosses vers θ≈4.2,
-   léger creux au départ θ=0. Une courbe polaire r(θ) positive
-   ne PEUT PAS s'auto-croiser : la boucle est continue par
-   construction, et la validation numérique garantit ≥27 blocs
-   entre les brins les plus proches (route de 20 + 7 de marge).
+   Les 8 sections dans l'ordre (f = fraction du tour) :
+     1. f≈0.00  ligne de départ + courte ligne droite
+     2. f≈0.125 premier virage GAUCHE long et progressif (-14)
+     3. f≈0.27  entrée dans la prairie, nouveau virage gauche (-10)
+     4. f≈0.43  section prairie : 2-3 courbes douces en S (sin)
+     5. f≈0.56  sortie de prairie, léger virage DROITE (+8) + rampe
+     6. f≈0.645 virage gauche après la rampe (-12)
+     7. f≈0.78  zone des bosses : ondulations radiales + 4 bosses
+                de hauteur réelles sur la route
+     8. f≈0.925 dernier virage gauche (-10) vers l'arrivée
 
-   Altitude : montée douce jusqu'au fond du circuit (sin),
-   bosses marquées de hauteur dans la section bosses. */
-function fen(theta, centre, largeur) {  // fenêtre triangulaire localisée autour de centre
-  let d = theta - centre;
-  d = Math.atan2(Math.sin(d), Math.cos(d)); // distance angulaire (boucle)
+   Validation numérique (Node) : r min = 146 > 0, distance min
+   entre brins non voisins = 42 blocs (route 20 + marge), rayon de
+   courbure min = 48 → aucun virage serré. La hauteur h(f) monte
+   doucement (sin) et les 4 bosses gaussiennes de la section 7 sont
+   de vraies variations d'altitude prises en compte par la voiture. */
+const TAU = Math.PI * 2;
+function fen(f, centre, largeur) { // fenêtre triangulaire localisée (f en fraction de tour)
+  let d = f - centre;
+  d = Math.atan2(Math.sin(d * TAU), Math.cos(d * TAU)) / TAU; // distance angulaire bouclée
   return Math.max(0, 1 - Math.abs(d) / largeur);
 }
 const RAYON_CIRCUIT = 160;   // rayon de base (→ circuit ~1000 blocs de tour)
 const NOMBRE_POINTS = 44;    // points de passage générés
+function rayonCircuit(f) {
+  let v = RAYON_CIRCUIT;
+  v -= 14 * fen(f, 0.125, 0.16);   // 2. virage gauche long
+  v -= 10 * fen(f, 0.27, 0.10);    // 3. entrée prairie, virage gauche
+  v += 7 * Math.sin(2.5 * TAU * f + 0.6) * fen(f, 0.43, 0.12); // 4. serpentin en S
+  v += 8  * fen(f, 0.56, 0.06);     // 5. sortie prairie, léger virage droite
+  v -= 12 * fen(f, 0.645, 0.10);    // 6. virage gauche après la rampe
+  v += 5 * Math.sin(4 * TAU * f) * fen(f, 0.78, 0.10); // 7. ondulations zone des bosses
+  v -= 10 * fen(f, 0.925, 0.11);    // 8. dernier virage gauche
+  return v;
+}
+const BOSSES_H = [0.72, 0.76, 0.80, 0.84]; // positions des 4 bosses de hauteur (section 7)
+function hauteurCircuit(f) {
+  let v = 2.2 + 2.0 * Math.sin(TAU * f - Math.PI / 2); // montée douce vers le fond
+  for (const b of BOSSES_H) { // vraies bosses sur la route en section 7
+    const d = Math.atan2(Math.sin((f - b) * TAU), Math.cos((f - b) * TAU)) / TAU;
+    v += 2.2 * Math.exp(-(d * d) / (2 * 0.02 * 0.02));
+  }
+  return v;
+}
 const POINTS_CIRCUIT = [];
 for (let i = 0; i < NOMBRE_POINTS; i++) {
-  const th = (i / NOMBRE_POINTS) * Math.PI * 2;
-  // serpentin du pré : 3 ondulations douces autour de θ≈1.9
-  const rS = 6 * Math.sin(3 * th + 0.6) * fen(th, 1.9, 2.2);
-  // section bosses : ondulations radiales autour de θ≈4.2
-  const rB = 5 * Math.sin(4 * th) * fen(th, 4.2, 1.3);
-  // léger creux à la ligne de départ (θ=0) pour un tracé pas parfaitement rond
-  const rD = -6 * fen(th, 0, 0.5);
-  const r = RAYON_CIRCUIT + rS + rB + rD;
-  // altitude : montée douce vers le fond, bosses marquées dans la section bosses
-  const fB = fen(th, 4.2, 1.3);
-  const h = 2.4 + 2.2 * Math.sin(th - Math.PI / 2) + 2.0 * Math.sin(6 * th) * fB;
-  POINTS_CIRCUIT.push([r * Math.cos(th), r * Math.sin(th), h]);
+  const f = i / NOMBRE_POINTS;
+  const th = f * TAU;
+  const r = rayonCircuit(f);
+  POINTS_CIRCUIT.push([r * Math.cos(th), r * Math.sin(th), hauteurCircuit(f)]);
 }
 const courbe = new THREE.CatmullRomCurve3(
   POINTS_CIRCUIT.map(([x, z, h]) => new THREE.Vector3(x, h, z)),
@@ -639,11 +659,11 @@ function creerCloture(px, pz, py, angle, pente) {
   }
   return g;
 }
-/* Clôtures sur les sections : pré (serpentin S) et zone des
-   bosses. Indices ciblés dans la zone correspondante du tracé. */
+/* Clôtures sur les sections : la prairie (serpentin S, f≈0.30-0.55)
+   et la zone des bosses (f≈0.70-0.87). Indices en fraction du tour. */
 const SECTIONS_CLOTURES = [
-  [Math.floor(NB_ECHANTILLONS * 0.13), Math.floor(NB_ECHANTILLONS * 0.20)],  // serpentin pré (θ≈1.9)
-  [Math.floor(NB_ECHANTILLONS * 0.57), Math.floor(NB_ECHANTILLONS * 0.73)],  // bosses (θ≈4.2)
+  [Math.floor(NB_ECHANTILLONS * 0.30), Math.floor(NB_ECHANTILLONS * 0.55)],  // section prairie
+  [Math.floor(NB_ECHANTILLONS * 0.70), Math.floor(NB_ECHANTILLONS * 0.87)],  // zone des bosses
 ];
 for (const [debut, fin] of SECTIONS_CLOTURES) {
   for (let i = debut; i < fin; i += 3) {
@@ -712,11 +732,10 @@ function creerZoneBoost(indice) {
   zonesBoost.push({ x: p.x, z: p.z, rayon: CONFIG.largeurRoute * 0.3 });
 }
 
-// Deux panneaux : à 20% du circuit (attaque de la grande droite)
-// et à 60% (relance avant l'épingle). Indices fixes → toujours
-// aux mêmes endroits, pile sur la route.
-creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.30));  // sortie du serpentin
-creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.50));  // avant la zone des bosses
+// Deux panneaux : au début de la ligne droite après le départ
+// (f≈0.06, section 1) et en pleine section prairie (f≈0.50).
+creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.06));
+creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.50));
 
 /* --- TREMPLINS : entre les deux zones d'accélération (40% et
    80% du circuit). Même taille que les accélérateurs (60% de la
@@ -764,8 +783,8 @@ function creerTremplin(indice) {
   tremplins.push({ x: sx, z: sz, rayon: 2.2 });
 }
 
-creerTremplin(Math.floor(NB_ECHANTILLONS * 0.42));  // relance avant les bosses
-creerTremplin(Math.floor(NB_ECHANTILLONS * 0.80));  // avant le dernier virage
+creerTremplin(Math.floor(NB_ECHANTILLONS * 0.56));  // section 5 : rampe en sortie de prairie
+creerTremplin(Math.floor(NB_ECHANTILLONS * 0.76));  // section 7 : permet de sauter par-dessus une bosse
 
 /* =========================================================
    3. LE DÉCOR : ARBRES, MAISONS ET VACHES
@@ -939,6 +958,35 @@ if (FLEURS) {
   scene.add(fleursInstance);
 }
 
+/* Une ferme simple low-poly : grange rouge + silo cylindrique,
+   placée à droite du premier virage (section 2, extérieur du
+   virage = rayon plus grand que la piste à cet endroit). */
+function creerFerme(x, z, ry) {
+  const ferme = new THREE.Group();
+  // Grange : murs crème + toit rouge en escalier
+  ferme.add(bloc(6, 3.2, 5, 0xD7C49E, 0, 1.6, 0));
+  ferme.add(bloc(6.6, 0.5, 5.6, 0xB71C1C, 0, 3.45, 0));
+  ferme.add(bloc(5.2, 0.5, 4.6, 0xB71C1C, 0, 3.95, 0));
+  ferme.add(bloc(1.4, 2.2, 0.2, 0x5D4037, 0, 1.1, 2.55)); // porte
+  // Silo : cylindre gris clair à côté de la grange (8 pans = low-poly)
+  const silo = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.6, 1.6, 7, 8),
+    matériauPour(0xCFD8DC)
+  );
+  silo.position.set(4.5, 3.5, 0);
+  ferme.add(silo);
+  const toitSilo = new THREE.Mesh(
+    new THREE.ConeGeometry(1.8, 1.2, 8),
+    matériauPour(0x90A4AE)
+  );
+  toitSilo.position.set(4.5, 7.6, 0);
+  ferme.add(toitSilo);
+  ferme.position.set(x, hauteurTerrain(x, z), z);
+  ferme.rotation.y = ry;
+  enregistrerObstacle(x, z, 6.5, 'solide', ferme);
+  return ferme;
+}
+
 /* Remplit la prairie : arbres, maisons, vaches */
 // Deux vaches POSÉES SUR LA ROUTE, au milieu du circuit :
 // une à mi-parcour (opposée à la ligne de départ), l'autre
@@ -952,6 +1000,17 @@ if (FLEURS) {
     activerOmbresPortees(v);
     scene.add(v);
   }
+}
+// Ferme à droite du premier virage (section 2, f≈0.14) : côté
+// extérieur du virage = rayon supérieur à celui de la piste.
+{
+  const f = 0.14;
+  const p = courbe.getPointAt(f);
+  const rr = rayonCircuit(f) + 26; // 26 blocs hors de la route
+  const th = f * TAU;
+  const ferme = creerFerme(rr * Math.cos(th), rr * Math.sin(th), Math.random() * Math.PI * 2);
+  activerOmbresPortees(ferme);
+  scene.add(ferme);
 }
 for (let essai = 0; essai < 350; essai++) {
   const x = (Math.random() - 0.5) * 440;
