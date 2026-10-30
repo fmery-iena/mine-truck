@@ -1057,7 +1057,7 @@ scene.add(pickup);
    gardent leur propre petit balancement d'inertie dans les
    virages (voir update()). Pour changer leur taille : modifier
    ÉCHELLE_POULE. */
-const ÉCHELLE_POULE = 1.25; // grosses poules bien visibles
+const ÉCHELLE_POULE = 0.8; // poules plus petites : elles glissent dans la benne lors des virages
 const poules = []; // pour l'animation d'inertie dans update()
 
 function creerPoule(couleurCorps, couleurAile, x, z, souplesse) {
@@ -1739,8 +1739,29 @@ function update() {
   for (const poule of poules) {
     poule.inertie += (forceVirage - poule.inertie) * poule.souplesse;
     poule.rotation.z = poule.inertie * 0.4;              // bascule du corps
-    poule.position.x = poule.xBase - poule.inertie * 0.14; // glissée dans la benne
+    // Glissée dans la benne, plus ample maintenant qu'elles sont
+    // plus petites : elles traversent la benne jusqu'à la ridelle.
+    poule.position.x = poule.xBase - poule.inertie * 0.45;
     poule.rotation.x = Math.sin(tMaintenant * 2.5 + poule.phase) * 0.03; // petit picorage idle
+    // AGITATION : quand la glissée atteint le bord de la benne
+    // (ridelle), la poule s'affole — tremblement rapide sur X
+    // et battement d'ailes (rotation Z additionnelle) qui
+    // s'atténue dès qu'elle quitte le bord.
+    const distanceBord = Math.abs(poule.inertie) * 0.45; // déplacement depuis le repos
+    const LIMITE_BENNE = 0.62;                            // position de la ridelle (benne interne)
+    if (distanceBord > LIMITE_BENNE) {
+      // intensité de l'affolement : croît avec l'enfoncement dans le bord
+      const affolee = Math.min(1, (distanceBord - LIMITE_BENNE) / 0.12);
+      const t = tMaintenant;
+      // tremblement latéral rapide + battement d'ailes
+      poule.position.x += Math.sin(t * 38 + poule.phase) * 0.03 * affolee;
+      poule.rotation.z += Math.sin(t * 26 + poule.phase) * 0.18 * affolee;
+      poule.rotation.x = Math.sin(t * 32 + poule.phase) * 0.12 * affolee; // cabre/bascule
+      // petit sursaut vertical (battement d'ailes)
+      poule.position.y = HAUTEUR_ROUTE + 0.72 + Math.abs(Math.sin(t * 20 + poule.phase)) * 0.08 * affolee;
+    } else {
+      poule.position.y = HAUTEUR_ROUTE + 0.72; // retour au plancher
+    }
   }
 
   // Nuages : dérive lente en altitude
