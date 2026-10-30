@@ -290,6 +290,7 @@ const CONFIG = {
 };
 
 const HAUTEUR_ROUTE = 0.2;
+const demi = CONFIG.largeurRoute / 2; // demi-largeur de route (utilisé par le terrain ET la route)
 const COULEUR_ROUTE = 0x26262C; // anthracite foncé (assombri : la route doit rester sombre)
 const COULEUR_LIGNE = 0xE0E0E0;
 const COULEUR_ACCOT = 0x8F8770;
@@ -560,7 +561,6 @@ function activerOmbresPortees(objet) {
    l'asphalte lui-même. */
 const groupeRoute = new THREE.Group();
 const PAS = 2; // distance entre deux pavés
-const demi = CONFIG.largeurRoute / 2;
 
 for (let i = 0; i < NB_ECHANTILLONS; i++) {
   const t = i / NB_ECHANTILLONS;
