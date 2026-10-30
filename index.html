@@ -164,7 +164,7 @@ import * as THREE from 'three';
 
 /* ---------- 1. SCÈNE, CAMÉRA, LUMIÈRES ---------- */
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xBFE8FF, 260, 520); // brume repoussée : circuit Meuh Meuh très étendu
+scene.fog = new THREE.Fog(0xBFE8FF, 300, 560); // brume repoussée : circuit Meuh Meuh très étendu
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 800);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -244,10 +244,10 @@ soleil.position.copy(POSITION_SOLEIL);
 soleil.castShadow = true;
 // Zone couverte par les ombres : juste la piste et ses abords
 soleil.shadow.mapSize.set(2048, 2048);
-soleil.shadow.camera.left = -220;
-soleil.shadow.camera.right = 220;
-soleil.shadow.camera.top = 220;
-soleil.shadow.camera.bottom = 220;
+soleil.shadow.camera.left = -200;
+soleil.shadow.camera.right = 200;
+soleil.shadow.camera.top = 200;
+soleil.shadow.camera.bottom = -200;
 soleil.shadow.camera.near = 10;
 soleil.shadow.camera.far = 600;
 soleil.shadow.bias = -0.0005; // évite les artefacts de bord
@@ -329,40 +329,44 @@ function bloc(largeur, hauteur, profondeur, couleur, x, y, z) {
    les lignes droites et tout le tracé gardent exactement les
    mêmes proportions (2x plus grand pour la route 2x plus large). */
 const ECHELLE_CIRCUIT = 2; // 2 = circuit 2x plus grand (cohérent avec largeurRoute 2x)
-/* --- NOUVEAU CIRCUIT : inspiré de « Meuh Meuh » (Moo Moo
-   Meadows, Mario Kart Wii). Structure de la boucle, dans l'ordre
-   (sens de course = sens INVERSE de la liste, cf. départ) :
+/* --- CIRCUIT « MEEUH MEEUH » v2 : GÉNÉRATION POLAIRE.
+   L'ancien tracé (points posés à la main) s'AUTO-CROISAIT :
+   des brins de piste passaient à 2-13 blocs l'un de l'autre
+   alors que la route fait 20 de large → pavés superposés,
+   route « cassée », discontinuités visibles.
 
-   1. Zone de départ : courte ligne droite large (indices 0-2)
-   2. Virage gauche progressif et long (3-6)
-   3. Section « pré » : serpentin en S, 3 courbes douces (7-11)
-   4. Virage droite + RAMPE/TREMPLIN intégré au tracé (12-14)
-   5. Virage gauche (15-17)
-   6. Zone ouverte avec collines et bosses (18-22) : le terrain
-      monte et on COUPE par-dessus les collines d'herbe
-   7. Dernier virage gauche vers la ligne d'arrivée (23-0)
+   Ici le tracé est défini en COORDONNÉES POLAIRES : un rayon
+   de base R=160 auquel on ajoute des ondulations locales
+   (fenêtres) — serpentin en S vers θ≈1.9, bosses vers θ≈4.2,
+   léger creux au départ θ=0. Une courbe polaire r(θ) positive
+   ne PEUT PAS s'auto-croiser : la boucle est continue par
+   construction, et la validation numérique garantit ≥27 blocs
+   entre les brins les plus proches (route de 20 + 7 de marge).
 
-   Chaque point porte son ALTITUDE (3e valeur) : la route monte
-   et descend doucement — colline au fond du circuit, bosses
-   marquées dans la dernière section. Le tracé est ~2x plus
-   long que l'ancienne boucle. */
-const POINTS_CIRCUIT = [
-  // x, z, hauteur
-  [0, -60, 0], [40, -60, 0],                    // 1. départ : ligne droite large
-  [78, -48, 0.5], [100, -22, 1.5],              // 2. virage gauche long et progressif
-  [104, 8, 2.5], [96, 34, 3],                   //   (la route commence à monter)
-  [80, 56, 3], [52, 66, 2.5],                   // 3. pré : entrée du serpentin en S
-  [24, 62, 2], [2, 48, 2.5], [20, 34, 3],       //   S doux (gauche-droite-gauche)
-  [48, 22, 3.5], [76, 14, 4],                   //   sortie du S
-  [92, -6, 4.5], [98, -30, 5],                 // 4. virage droite + montée rampe
-  [84, -52, 5.5], [56, -64, 5],                // 5. virage gauche
-  [24, -68, 4], [-6, -66, 3],                  // 6. zone ouverte : on descend
-  [-36, -60, 2.5], [-58, -44, 3.5],            //   ... en traversant les bosses
-  [-64, -18, 4.5], [-54, 2, 5.5],              //   (3 bosses marquées ici)
-  [-30, 10, 6], [-12, 2, 4.5],                 // 7. dernier virage gauche
-  [-4, -28, 2],                               //   point intermédiaire : plus de longue
-                                              //   diagonale qui coupe le pré
-].map(([x, z, h]) => [x * ECHELLE_CIRCUIT * 0.8, z * ECHELLE_CIRCUIT * 0.8, h * ECHELLE_CIRCUIT * 0.4]);
+   Altitude : montée douce jusqu'au fond du circuit (sin),
+   bosses marquées de hauteur dans la section bosses. */
+function fen(theta, centre, largeur) {  // fenêtre triangulaire localisée autour de centre
+  let d = theta - centre;
+  d = Math.atan2(Math.sin(d), Math.cos(d)); // distance angulaire (boucle)
+  return Math.max(0, 1 - Math.abs(d) / largeur);
+}
+const RAYON_CIRCUIT = 160;   // rayon de base (→ circuit ~1000 blocs de tour)
+const NOMBRE_POINTS = 44;    // points de passage générés
+const POINTS_CIRCUIT = [];
+for (let i = 0; i < NOMBRE_POINTS; i++) {
+  const th = (i / NOMBRE_POINTS) * Math.PI * 2;
+  // serpentin du pré : 3 ondulations douces autour de θ≈1.9
+  const rS = 6 * Math.sin(3 * th + 0.6) * fen(th, 1.9, 2.2);
+  // section bosses : ondulations radiales autour de θ≈4.2
+  const rB = 5 * Math.sin(4 * th) * fen(th, 4.2, 1.3);
+  // léger creux à la ligne de départ (θ=0) pour un tracé pas parfaitement rond
+  const rD = -6 * fen(th, 0, 0.5);
+  const r = RAYON_CIRCUIT + rS + rB + rD;
+  // altitude : montée douce vers le fond, bosses marquées dans la section bosses
+  const fB = fen(th, 4.2, 1.3);
+  const h = 2.4 + 2.2 * Math.sin(th - Math.PI / 2) + 2.0 * Math.sin(6 * th) * fB;
+  POINTS_CIRCUIT.push([r * Math.cos(th), r * Math.sin(th), h]);
+}
 const courbe = new THREE.CatmullRomCurve3(
   POINTS_CIRCUIT.map(([x, z, h]) => new THREE.Vector3(x, h, z)),
   true,   // fermé : la boucle revient au départ
@@ -418,7 +422,7 @@ function hauteurPiste(x, z, indiceProche) {
 // P3 : nombre de pavés de la route. 280 suffit largement (le pas
 // entre deux pavés reste court), ça divise par ~2.5 le nombre de
 // meshes par rapport aux 700 d'origine → gros gain de FPS.
-const NB_ECHANTILLONS = 900; // circuit Moo Meuh ~2x plus long : plus de pavés, densité identique
+const NB_ECHANTILLONS = 1000; // tour ~1000 blocs / PAS 2 → pavés joints, densité identique
 const echantillons = [];
 const tangentes = [];
 for (let i = 0; i < NB_ECHANTILLONS; i++) {
@@ -530,7 +534,7 @@ function hauteurTerrain(x, z) {
   return Math.max(0, hPiste + (hBrute - hPiste) * k);
 }
 const TERRAILLE_T = 96;                 // résolution du maillage
-const geoTerrain = new THREE.PlaneGeometry(700, 700, TERRAILLE_T, TERRAILLE_T);
+const geoTerrain = new THREE.PlaneGeometry(520, 520, TERRAILLE_T, TERRAILLE_T);
 geoTerrain.rotateX(-Math.PI / 2);       // à plat, normal vers le haut
 {
   const pos = geoTerrain.attributes.position;
@@ -635,8 +639,8 @@ function creerCloture(px, pz, py, angle) {
 /* Clôtures sur les sections : pré (serpentin S) et zone des
    bosses. Indices ciblés dans la zone correspondante du tracé. */
 const SECTIONS_CLOTURES = [
-  [Math.floor(NB_ECHANTILLONS * 0.26), Math.floor(NB_ECHANTILLONS * 0.46)],  // serpentin pré
-  [Math.floor(NB_ECHANTILLONS * 0.62), Math.floor(NB_ECHANTILLONS * 0.88)],  // bosses
+  [Math.floor(NB_ECHANTILLONS * 0.13), Math.floor(NB_ECHANTILLONS * 0.20)],  // serpentin pré (θ≈1.9)
+  [Math.floor(NB_ECHANTILLONS * 0.57), Math.floor(NB_ECHANTILLONS * 0.73)],  // bosses (θ≈4.2)
 ];
 for (const [debut, fin] of SECTIONS_CLOTURES) {
   for (let i = debut; i < fin; i += 3) {
@@ -704,8 +708,8 @@ function creerZoneBoost(indice) {
 // Deux panneaux : à 20% du circuit (attaque de la grande droite)
 // et à 60% (relance avant l'épingle). Indices fixes → toujours
 // aux mêmes endroits, pile sur la route.
-creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.20));
-creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.60));
+creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.30));  // sortie du serpentin
+creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.50));  // avant la zone des bosses
 
 /* --- TREMPLINS : entre les deux zones d'accélération (40% et
    80% du circuit). Même taille que les accélérateurs (60% de la
@@ -752,8 +756,8 @@ function creerTremplin(indice) {
   tremplins.push({ x: sx, z: sz, rayon: 2.2 });
 }
 
-creerTremplin(Math.floor(NB_ECHANTILLONS * 0.40));
-creerTremplin(Math.floor(NB_ECHANTILLONS * 0.80));
+creerTremplin(Math.floor(NB_ECHANTILLONS * 0.42));  // relance avant les bosses
+creerTremplin(Math.floor(NB_ECHANTILLONS * 0.80));  // avant le dernier virage
 
 /* =========================================================
    3. LE DÉCOR : ARBRES, MAISONS ET VACHES
@@ -876,8 +880,8 @@ matHerbe.onBeforeCompile = (shader) => {
 //    les buffers de matrices/couleurs du InstancedMesh.
 const brins = [];
 for (let i = 0; brins.length < NB_BRINS; i++) {
-  const x = 6 + (Math.random() - 0.5) * 350;
-  const z = -4 + (Math.random() - 0.5) * 350;
+  const x = (Math.random() - 0.5) * 460;
+  const z = (Math.random() - 0.5) * 460;
   // pas d'herbe sur la piste ni juste à côté (zone roulable nette)
   if (distanceALaPiste(x, z) < demi + 2.5) continue;
   const hauteur = 0.25 + Math.random() * 0.5;  // hauteurs très variées
@@ -933,7 +937,7 @@ if (FLEURS) {
 // à mi-chemin de celle-ci. Elles se baladent désormais
 // librement, y compris sur la piste !
 {
-  const indices = [Math.floor(NB_ECHANTILLONS * 0.25), Math.floor(NB_ECHANTILLONS * 0.75), Math.floor(NB_ECHANTILLONS * 0.90)];
+  const indices = [Math.floor(NB_ECHANTILLONS * 0.15), Math.floor(NB_ECHANTILLONS * 0.45), Math.floor(NB_ECHANTILLONS * 0.65), Math.floor(NB_ECHANTILLONS * 0.85)];
   for (const i of indices) {
     const p = echantillons[i];
     const v = creerVache(p.x, p.z);
@@ -942,8 +946,8 @@ if (FLEURS) {
   }
 }
 for (let essai = 0; essai < 350; essai++) {
-  const x = 6 + (Math.random() - 0.5) * 340;
-  const z = -4 + (Math.random() - 0.5) * 340;
+  const x = (Math.random() - 0.5) * 440;
+  const z = (Math.random() - 0.5) * 440;
   const d = distanceALaPiste(x, z);
   const r = Math.random();
   function poser(decor) {
