@@ -623,14 +623,17 @@ for (let i = 0; i < NB_ECHANTILLONS; i++) {
    Barrières voxel : 2 piquets + 2 traverses par section, posées
    tous les 3 pavés. AUCUNE collision (décor pur) pour garder
    la conduite fluide — elles marquent visuellement les bords. */
-function creerCloture(px, pz, py, angle) {
+function creerCloture(px, pz, py, angle, pente) {
   const g = new THREE.Group();
   const BOIS = 0x8D6E63;
   const BOIS_SOMBRE = 0x6D4C41;
   for (const cote of [-1, 1]) {
     const bx = px + Math.cos(angle) * (demi + 1.2) * cote;
     const bz = pz - Math.sin(angle) * (demi + 1.2) * cote;
-    g.add(bloc(0.35, 1.6, 0.35, BOIS_SOMBRE, bx, py + 0.8, bz));          // piquets
+    // Allonge les piquets vers le bas selon la pente : même en montée,
+    // la clôture reste ancrée au sol au lieu de flotter.
+    const longueur = 1.6 + Math.abs(pente) * 4;
+    g.add(bloc(0.35, longueur, 0.35, BOIS_SOMBRE, bx, py + longueur / 2 - Math.abs(pente) * 2, bz));
     g.add(bloc(0.12, 0.18, 3.2, BOIS, bx, py + 1.25, bz));                 // traverse haute
     g.add(bloc(0.12, 0.18, 3.2, BOIS, bx, py + 0.7, bz));                  // traverse basse
   }
@@ -644,12 +647,13 @@ const SECTIONS_CLOTURES = [
 ];
 for (const [debut, fin] of SECTIONS_CLOTURES) {
   for (let i = debut; i < fin; i += 3) {
-    const t = i / NB_ECHANTILLONS;
-    const p = courbe.getPointAt(t);
-    const tang = courbe.getTangentAt(t);
+    const p = echantillons[i];
+    const tang = tangentes[i];
     const angle = Math.atan2(tang.x, tang.z);
-    const cl = creerCloture(p.x, p.z, p.y, angle);
-    cl.rotation.y = angle;
+    // pente locale = composante verticale de la tangente → ancre la
+    // clôture dans la pente pour qu'elle suive la route en montée/descente
+    const pente = tang.y;
+    const cl = creerCloture(p.x, p.z, p.y, angle, pente);
     scene.add(cl);
   }
 }
@@ -665,7 +669,7 @@ for (let i = 0; i < 10; i++) {
     HAUTEUR_ROUTE + 0.04, 0);
   ligneDepart.add(carreau);
 }
-ligneDepart.position.set(depart.x, 0, depart.z);
+ligneDepart.position.set(depart.x, depart.y, depart.z); // suit l'altitude de la piste
 ligneDepart.rotation.y = angleDepart;
 groupeRoute.add(ligneDepart);
 
@@ -697,7 +701,10 @@ function creerZoneBoost(indice) {
       zone.add(chevron);
     }
   }
-  zone.position.set(p.x, 0, p.z);
+  // FIX : y=0 laissait les pads ENTERRÉS sous la route vallonnée
+  // (qui monte jusqu'à ~5 blocs) → invisibles. Ils suivent maintenant
+  // l'altitude de la piste, comme la route elle-même.
+  zone.position.set(p.x, p.y, p.z);
   zone.rotation.y = angle;
   scene.add(zone);
 
@@ -744,7 +751,8 @@ function creerTremplin(indice) {
   // Bande rouge vive au sommet de la rampe : le point de décollage
   tremplin.add(bloc(TREMPLIN_LARGEUR, 0.1, 0.8, 0xFF1744,
     0, hauteurMax + 0.05, -TREMPLIN_LONGUEUR / 2 + 0.4));
-  tremplin.position.set(p.x, 0, p.z);
+  // FIX : y=0 laissait les tremplins ENTERRÉS sous la route vallonnée
+  tremplin.position.set(p.x, p.y, p.z);
   tremplin.rotation.y = angle;
   scene.add(tremplin);
 
@@ -765,19 +773,20 @@ creerTremplin(Math.floor(NB_ECHANTILLONS * 0.80));  // avant le dernier virage
    ========================================================= */
 function creerArbre(x, z) {
   const arbre = new THREE.Group();
-  arbre.position.y = hauteurTerrain(x, z); // posé sur la prairie vallonnée
   arbre.add(bloc(0.7, 2.2, 0.7, 0x6E4419, 0, 1.1, 0));
   const vert = [0x2E7D32, 0x388E3C, 0x43A047][Math.floor(Math.random() * 3)];
   arbre.add(bloc(2.6, 1.0, 2.6, vert, 0, 2.7, 0));
   arbre.add(bloc(1.8, 0.9, 1.8, vert, 0, 3.6, 0));
-  arbre.position.set(x, 0, z);
+  // posé sur la prairie vallonnée (l'ancien position.set(x,0,z)
+  // écrasait le y du terrain → arbres enterrés/flottants)
+  arbre.position.set(x, hauteurTerrain(x, z), z);
   enregistrerObstacle(x, z, 0.9, 'solide', arbre); // tronc
   return arbre;
 }
 
 function creerMaison(x, z, ry) {
   const maison = new THREE.Group();
-  maison.position.y = hauteurTerrain(x, z); // posée sur la prairie vallonnée
+  // (posée via position.set plus bas, avec la hauteur du terrain)
   const murs = [0xD7C49E, 0xCBB994, 0xDEB887][Math.floor(Math.random() * 3)];
   maison.add(bloc(4.5, 3, 4.5, murs, 0, 1.5, 0));
   maison.add(bloc(5.2, 0.6, 5.2, 0xB71C1C, 0, 3.3, 0));
@@ -786,7 +795,7 @@ function creerMaison(x, z, ry) {
   maison.add(bloc(1.0, 1.6, 0.15, 0x5D4037, 0, 0.8, 2.3));
   maison.add(bloc(1.0, 1.0, 0.15, 0x81D4FA, -1.5, 1.8, 2.3));
   maison.add(bloc(1.0, 1.0, 0.15, 0x81D4FA, 1.5, 1.8, 2.3));
-  maison.position.set(x, 0, z);
+  maison.position.set(x, hauteurTerrain(x, z), z); // posée sur la prairie vallonnée
   maison.rotation.y = ry;
   enregistrerObstacle(x, z, 2.8, 'solide', maison); // murs + toit
   return maison;
@@ -795,7 +804,6 @@ function creerMaison(x, z, ry) {
 /* Une vache Minecraft : corps blanc à taches, tête, cornes */
 function creerVache(x, z) {
   const vache = new THREE.Group();
-  vache.position.y = hauteurTerrain(x, z);  // posée sur la prairie vallonnée (fix flottantes)
   vache.add(bloc(1.4, 1.0, 2.4, 0xF5F5F5, 0, 1.3, 0));          // corps
   // Taches noires : fines plaques POSÉES SUR la peau (flancs,
   // dos, arrière-train), en nombre suffisant pour un pelage
@@ -817,7 +825,7 @@ function creerVache(x, z) {
   vache.add(bloc(0.25, 1.0, 0.25, 0x37474F, 0.45, 0.5, -0.8));
   vache.add(bloc(0.25, 1.0, 0.25, 0x37474F, -0.45, 0.5, 0.8));
   vache.add(bloc(0.25, 1.0, 0.25, 0x37474F, 0.45, 0.5, 0.8));
-  vache.position.set(x, 0, z);
+  vache.position.set(x, hauteurTerrain(x, z), z); // posée sur le sol réel (route ou prairie)
   vache.rotation.y = Math.random() * Math.PI * 2;
   const obs = enregistrerObstacle(x, z, 1.2, 'vache', vache); // corps (poussable)
   // Vie de la vache : mini machine à états idle/walk
