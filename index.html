@@ -164,7 +164,7 @@ import * as THREE from 'three';
 
 /* ---------- 1. SCÈNE, CAMÉRA, LUMIÈRES ---------- */
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xBFE8FF, 180, 380); // brume repoussée : le circuit est 2x plus grand
+scene.fog = new THREE.Fog(0xBFE8FF, 260, 520); // brume repoussée : circuit Meuh Meuh très étendu
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 800);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -244,10 +244,10 @@ soleil.position.copy(POSITION_SOLEIL);
 soleil.castShadow = true;
 // Zone couverte par les ombres : juste la piste et ses abords
 soleil.shadow.mapSize.set(2048, 2048);
-soleil.shadow.camera.left = -160;
-soleil.shadow.camera.right = 160;
-soleil.shadow.camera.top = 160;
-soleil.shadow.camera.bottom = -160;
+soleil.shadow.camera.left = -220;
+soleil.shadow.camera.right = 220;
+soleil.shadow.camera.top = 220;
+soleil.shadow.camera.bottom = 220;
 soleil.shadow.camera.near = 10;
 soleil.shadow.camera.far = 600;
 soleil.shadow.bias = -0.0005; // évite les artefacts de bord
@@ -328,16 +328,40 @@ function bloc(largeur, hauteur, profondeur, couleur, x, y, z) {
    les lignes droites et tout le tracé gardent exactement les
    mêmes proportions (2x plus grand pour la route 2x plus large). */
 const ECHELLE_CIRCUIT = 2; // 2 = circuit 2x plus grand (cohérent avec largeurRoute 2x)
+/* --- NOUVEAU CIRCUIT : inspiré de « Meuh Meuh » (Moo Moo
+   Meadows, Mario Kart Wii). Structure de la boucle, dans l'ordre
+   (sens de course = sens INVERSE de la liste, cf. départ) :
+
+   1. Zone de départ : courte ligne droite large (indices 0-2)
+   2. Virage gauche progressif et long (3-6)
+   3. Section « pré » : serpentin en S, 3 courbes douces (7-11)
+   4. Virage droite + RAMPE/TREMPLIN intégré au tracé (12-14)
+   5. Virage gauche (15-17)
+   6. Zone ouverte avec collines et bosses (18-22) : le terrain
+      monte et on COUPE par-dessus les collines d'herbe
+   7. Dernier virage gauche vers la ligne d'arrivée (23-0)
+
+   Chaque point porte son ALTITUDE (3e valeur) : la route monte
+   et descend doucement — colline au fond du circuit, bosses
+   marquées dans la dernière section. Le tracé est ~2x plus
+   long que l'ancienne boucle. */
 const POINTS_CIRCUIT = [
-  [47.6, 0], [48.1, 15.2], [41.5, 27.6], [30.7, 35.2],
-  [19.2, 39.6], [8.9, 43.8], [0, 48.8], [-8.2, 52.3],
-  [-16, 50.4], [-23, 41.5], [-29.2, 27.6], [-34.7, 12.9],
-  [-39.6, 0], [-42.7, -11.7], [-41.5, -24.4], [-34.7, -38.3],
-  [-23.2, -50.4], [-10.4, -56.7], [0, -55.2], [6.8, -48.1],
-  [12, -39.6], [19, -32.1], [29.2, -24.4], [40.2, -14],
-].map(([x, z]) => [x * ECHELLE_CIRCUIT, z * ECHELLE_CIRCUIT]);
+  // x, z, hauteur
+  [0, -60, 0], [40, -60, 0],                    // 1. départ : ligne droite large
+  [78, -48, 0.5], [100, -22, 1.5],              // 2. virage gauche long et progressif
+  [104, 8, 2.5], [96, 34, 3],                   //   (la route commence à monter)
+  [80, 56, 3], [52, 66, 2.5],                   // 3. pré : entrée du serpentin en S
+  [24, 62, 2], [2, 48, 2.5], [20, 34, 3],       //   S doux (gauche-droite-gauche)
+  [48, 22, 3.5], [76, 14, 4],                   //   sortie du S
+  [92, -6, 4.5], [98, -30, 5],                 // 4. virage droite + montée rampe
+  [84, -52, 5.5], [56, -64, 5],                // 5. virage gauche
+  [24, -68, 4], [-6, -66, 3],                  // 6. zone ouverte : on descend
+  [-36, -60, 2.5], [-58, -44, 3.5],            //   ... en traversant les bosses
+  [-64, -18, 4.5], [-54, 2, 5.5],              //   (3 bosses marquées ici)
+  [-30, 10, 6], [-8, 8, 3],                    // 7. dernier virage gauche
+].map(([x, z, h]) => [x * ECHELLE_CIRCUIT * 0.8, z * ECHELLE_CIRCUIT * 0.8, h * ECHELLE_CIRCUIT * 0.4]);
 const courbe = new THREE.CatmullRomCurve3(
-  POINTS_CIRCUIT.map(([x, z]) => new THREE.Vector3(x, 0, z)),
+  POINTS_CIRCUIT.map(([x, z, h]) => new THREE.Vector3(x, h, z)),
   true,   // fermé : la boucle revient au départ
   'catmullrom',
   0.5
@@ -362,7 +386,7 @@ function enregistrerObstacle(x, z, rayon, type, mesh) {
 // P3 : nombre de pavés de la route. 280 suffit largement (le pas
 // entre deux pavés reste court), ça divise par ~2.5 le nombre de
 // meshes par rapport aux 700 d'origine → gros gain de FPS.
-const NB_ECHANTILLONS = 560; // 2x plus de pavés : le circuit est 2x plus long, la densité de pavés reste la même
+const NB_ECHANTILLONS = 900; // circuit Moo Meuh ~2x plus long : plus de pavés, densité identique
 const echantillons = [];
 const tangentes = [];
 for (let i = 0; i < NB_ECHANTILLONS; i++) {
@@ -445,18 +469,28 @@ matSolDessus.onBeforeCompile = (shader) => {
       diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.92, 0.90, 0.62), n * 0.45);
       diffuseColor.rgb *= 0.92 + 0.16 * bruit(vMonde.xz * 0.31); // grain fin`);
 };
-const sol = new THREE.Mesh(
-  new THREE.BoxGeometry(360, 1, 360),
-  [
-    new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
-    new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
-    matSolDessus, // herbe dessus : texturée + noise
-    new THREE.MeshLambertMaterial({ color: 0x6E4419 }),
-    new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
-    new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
-  ]
-);
-sol.position.set(6, -0.5, -4);
+/* Terrain vallonné : la prairie n'est plus plate — des collines
+   douces (bruit sinusoïdal multi-octaves) bordent la piste et
+   se fondent avec ses montées. Résolution 96x96 : assez fin pour
+   des collines, léger pour le GPU (1 draw call). */
+function hauteurTerrain(x, z) {
+  // collines douces, amplitude modérée ; plat près du centre
+  return 2.2 * Math.sin(x * 0.018) * Math.cos(z * 0.015)
+       + 1.4 * Math.sin(x * 0.045 + 1.3) * Math.cos(z * 0.04 + 0.6)
+       + 0.8 * Math.sin((x + z) * 0.09);
+}
+const TERRAILLE_T = 96;                 // résolution du maillage
+const geoTerrain = new THREE.PlaneGeometry(700, 700, TERRAILLE_T, TERRAILLE_T);
+geoTerrain.rotateX(-Math.PI / 2);       // à plat, normal vers le haut
+{
+  const pos = geoTerrain.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    pos.setY(i, Math.max(0, hauteurTerrain(pos.getX(i), pos.getZ(i)) + 0.0));
+  }
+  geoTerrain.computeVertexNormals();
+}
+const sol = new THREE.Mesh(geoTerrain, matSolDessus); // herbe texturée dessus
+sol.position.set(0, 0, 0);
 sol.receiveShadow = true; // le sol accueille les ombres portées
 scene.add(sol);
 
@@ -487,17 +521,20 @@ for (let i = 0; i < NB_ECHANTILLONS; i++) {
   const tangente = courbe.getTangentAt(t);
   const angle = Math.atan2(tangente.x, tangente.z);
 
-  // Accotements gravier de chaque côté
+  // Accotements gravier de chaque côté (suivent l'altitude)
   for (const cote of [-1, 1]) {
     const accot = bloc(1.4, 0.22, PAS + 0.6, COULEUR_ACCOT,
-      p.x + Math.cos(angle) * (demi + 0.7) * cote, -0.05, p.z - Math.sin(angle) * (demi + 0.7) * cote);
+      p.x + Math.cos(angle) * (demi + 0.7) * cote, p.y - 0.05, p.z - Math.sin(angle) * (demi + 0.7) * cote);
     accot.rotation.y = angle;
     groupeRoute.add(accot);
   }
 
   // Pavé d'asphalte uni, orienté dans le sens de la piste.
-  const pave = bloc(CONFIG.largeurRoute, 0.3, PAS + 0.6, COULEUR_ROUTE, p.x, 0.05, p.z);
+  // La hauteur suit la courbe (p.y) ; l'assiette du pavé est
+  // inclinée selon la pente (dévers) pour un rendu 3D crédible.
+  const pave = bloc(CONFIG.largeurRoute, 0.3, PAS + 0.6, COULEUR_ROUTE, p.x, p.y + 0.05, p.z);
   pave.rotation.y = angle;
+  pave.rotation.x = Math.atan2(courbe.getTangentAt(t).y, 1) * -1; // inclinaison dans la pente
   groupeRoute.add(pave);
 
   // Bordures : une bande continue ÉPAISSE (0.7) légèrement en
@@ -505,12 +542,12 @@ for (let i = 0; i < NB_ECHANTILLONS; i++) {
   // « bord de route usé puis repeint », très lisible.
   for (const cote of [-1, 1]) {
     const bande = bloc(0.7, 0.06, PAS + 0.6, 0xD6D3CE,
-      p.x + Math.cos(angle) * (demi - 0.45) * cote, HAUTEUR_ROUTE + 0.03,
+      p.x + Math.cos(angle) * (demi - 0.45) * cote, p.y + HAUTEUR_ROUTE + 0.03,
       p.z - Math.sin(angle) * (demi - 0.45) * cote);
     bande.rotation.y = angle;
     groupeRoute.add(bande);
     const ligne = bloc(0.25, 0.06, PAS + 0.6, COULEUR_LIGNE,
-      p.x + Math.cos(angle) * (demi - 1.1) * cote, HAUTEUR_ROUTE + 0.04,
+      p.x + Math.cos(angle) * (demi - 1.1) * cote, p.y + HAUTEUR_ROUTE + 0.04,
       p.z - Math.sin(angle) * (demi - 1.1) * cote);
     ligne.rotation.y = angle;
     groupeRoute.add(ligne);
@@ -520,11 +557,47 @@ for (let i = 0; i < NB_ECHANTILLONS; i++) {
   // (1.8 au lieu de 1.2) et posés en quinconce léger pour un
   // rendu régulier du pointillé le long de la courbe.
   if (i % 2 === 0) {
-    const milieu = bloc(0.35, 0.06, 1.8, COULEUR_LIGNE, p.x, HAUTEUR_ROUTE + 0.04, p.z);
+    const milieu = bloc(0.35, 0.06, 1.8, COULEUR_LIGNE, p.x, p.y + HAUTEUR_ROUTE + 0.04, p.z);
     milieu.rotation.y = angle;
     groupeRoute.add(milieu);
   }
 
+}
+
+/* --- Clôtures en bois le long de la route : surtout dans la
+   section pré (serpentin) et autour de la zone des bosses.
+   Barrières voxel : 2 piquets + 2 traverses par section, posées
+   tous les 3 pavés. AUCUNE collision (décor pur) pour garder
+   la conduite fluide — elles marquent visuellement les bords. */
+function creerCloture(px, pz, py, angle) {
+  const g = new THREE.Group();
+  const BOIS = 0x8D6E63;
+  const BOIS_SOMBRE = 0x6D4C41;
+  for (const cote of [-1, 1]) {
+    const bx = px + Math.cos(angle) * (demi + 1.2) * cote;
+    const bz = pz - Math.sin(angle) * (demi + 1.2) * cote;
+    g.add(bloc(0.35, 1.6, 0.35, BOIS_SOMBRE, bx, py + 0.8, bz));          // piquets
+    g.add(bloc(0.12, 0.18, 3.2, BOIS, bx, py + 1.25, bz));                 // traverse haute
+    g.add(bloc(0.12, 0.18, 3.2, BOIS, bx, py + 0.7, bz));                  // traverse basse
+  }
+  return g;
+}
+/* Clôtures sur les sections : pré (serpentin S) et zone des
+   bosses. Indices ciblés dans la zone correspondante du tracé. */
+const SECTIONS_CLOTURES = [
+  [Math.floor(NB_ECHANTILLONS * 0.26), Math.floor(NB_ECHANTILLONS * 0.46)],  // serpentin pré
+  [Math.floor(NB_ECHANTILLONS * 0.62), Math.floor(NB_ECHANTILLONS * 0.88)],  // bosses
+];
+for (const [debut, fin] of SECTIONS_CLOTURES) {
+  for (let i = debut; i < fin; i += 3) {
+    const t = i / NB_ECHANTILLONS;
+    const p = courbe.getPointAt(t);
+    const tang = courbe.getTangentAt(t);
+    const angle = Math.atan2(tang.x, tang.z);
+    const cl = creerCloture(p.x, p.z, p.y, angle);
+    cl.rotation.y = angle;
+    scene.add(cl);
+  }
 }
 
 /* --- Ligne de départ/arrivée en damier (au début de la boucle) --- */
@@ -762,7 +835,7 @@ for (let i = 0; brins.length < NB_BRINS; i++) {
     0.30 + Math.random() * 0.22                // luminosité variée
   ).getHex();
   const largeur = 0.12 + Math.random() * 0.10; // brins fins ou trapus
-  brins.push({ x, z, hauteur, couleur, largeur, inclinaison: (Math.random() - 0.5) * 0.35 });
+  brins.push({ x, z, hauteur, couleur, largeur, inclinaison: (Math.random() - 0.5) * 0.35, sol: hauteurTerrain(x, z) });
 }
 
 const herbeInstance = new THREE.InstancedMesh(geoCube, matHerbe, brins.length);
@@ -772,7 +845,7 @@ const pos = new THREE.Vector3();
 const ech = new THREE.Vector3();
 const col = new THREE.Color();
 brins.forEach((b, i) => {
-  pos.set(b.x, b.hauteur / 2, b.z);
+  pos.set(b.x, b.sol + b.hauteur / 2, b.z);
   // rotation Y aléatoire + légère inclinaison (penché par le vent)
   q.setFromEuler(new THREE.Euler(b.inclinaison, Math.random() * Math.PI, b.inclinaison * 0.5));
   ech.set(b.largeur, b.hauteur, b.largeur);
@@ -1208,6 +1281,7 @@ const voiture = {
   cap: Math.atan2(-tangentes[INDICE_DEPART].x, -tangentes[INDICE_DEPART].z), // sens inverse !
   vitesse: 0,
   surPiste: true,
+  hauteurRoute: 0,    // altitude de la route sous la voiture (terrain vallonné)
   dernierIndice: INDICE_DEPART, // pour compter les tours
 };
 
@@ -1216,7 +1290,7 @@ function pointLePlusProche(x, z) {
   let min = Infinity, indice = 0;
   // recherche locale autour du dernier indice connu (rapide,
   // symétrique car on roule dans les deux sens)
-  for (let delta = -40; delta <= 40; delta++) {
+  for (let delta = -60; delta <= 60; delta++) {
     const i = (voiture.dernierIndice + delta + NB_ECHANTILLONS) % NB_ECHANTILLONS;
     const dx = echantillons[i].x - x;
     const dz = echantillons[i].z - z;
@@ -1522,6 +1596,9 @@ function update() {
   const proche = pointLePlusProche(voiture.x, voiture.z);
   voiture.dernierIndice = proche.indice;
   voiture.surPiste = proche.distance < demi + 1.2;
+  // Altitude de la route sous la voiture : le pickup suit la
+  // pente du nouveau circuit vallonné (collines, bosses).
+  voiture.hauteurRoute = echantillons[proche.indice].y;
 
   // Dans l'herbe : la vitesse est limitée (et on ralentit vite)
   const vitessePlafond = voiture.tempsBoost > 0
@@ -1565,7 +1642,7 @@ function update() {
 
 
   // Placer la voiture (légère inclinaison dans les virages)
-  pickup.position.set(voiture.x, HAUTEUR_ROUTE + voiture.altitude, voiture.z);
+  pickup.position.set(voiture.x, voiture.hauteurRoute + HAUTEUR_ROUTE + voiture.altitude, voiture.z);
   // En vol : petite inclinaison avant au décollage, puis retour à plat
   pickup.rotation.x += ((voiture.enVol ? -0.15 : 0) - pickup.rotation.x) * 0.15;
   pickup.rotation.y = voiture.cap + Math.PI; // l'avant du pickup regarde vers -z
@@ -1592,11 +1669,11 @@ function update() {
 
   // Caméra de poursuite : derrière la voiture, dans son sens
   const hauteurCam = 4.5, distanceCam = 12;
-  const cibleCam = new THREE.Vector3(voiture.x, 1.5 + voiture.altitude * 0.8, voiture.z);
+  const cibleCam = new THREE.Vector3(voiture.x, voiture.hauteurRoute + 1.5 + voiture.altitude * 0.8, voiture.z);
   const capCam = voiture.tempsSpin > 0 ? voiture.capDeplacement : voiture.cap;
   const posCamVoulue = new THREE.Vector3(
     voiture.x - Math.sin(capCam) * distanceCam,
-    hauteurCam,
+    voiture.hauteurRoute + hauteurCam,
     voiture.z - Math.cos(capCam) * distanceCam
   );
   camera.position.lerp(posCamVoulue, 0.08);
