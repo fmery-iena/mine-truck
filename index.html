@@ -1731,37 +1731,40 @@ function update() {
   pickup.rotation.z = direction * 0.08 * facteurVitesse;
 
   // Glissée des poules dans la benne, par inertie centrifuge.
-  // SENS : virage à GAUCHE (direction=-1) → la poule est projetée
-  // vers la DROITE de la benne ; virage à droite → vers la gauche.
-  // (C'est l'inertie : le truck tourne, les poules continuent tout droit.)
-  // La force est AMPLIFIÉE : même un virage modéré les fait glisser
-  // franchement d'un bord à l'autre de la benne.
+  // SENS (vérifié sur les conventions du jeu) : la consigne vaut
+  // +1 quand on appuie GAUCHE (cap += ...) → virage à GAUCHE.
+  // Par inertie, la poule est projetée vers l'EXTÉRIEUR du virage :
+  // virage à gauche (direction=+1) → poule vers la DROITE de la
+  // benne (+x local) → position.x = xBase + inertie (positive).
+  // Virage à droite (direction=-1) → poule vers la gauche. ✓
   const forceVirage = direction * facteurVitesse * 2.2; // -1..1 ×2.2 → glissade marquée
   const tMaintenant = performance.now() / 1000; // pour l'agitation
+  // Géométrie de la benne : ridelles à x = ±0.85 (épaisseur 0.15)
+  // → intérieur de la benne = |x| ≤ 0.72. Les poules RESTENT dedans.
+  const BORD_BENNE = 0.72;
   for (const poule of poules) {
     poule.inertie += (forceVirage - poule.inertie) * Math.min(1, poule.souplesse * 6); // réaction franche
     // bascule du corps dans le sens de la glissade
-    poule.rotation.z = poule.inertie * 0.4;
-    // glissée par inertie centrifuge : virage à GAUCHE (direction=-1)
-    // → la poule continue tout droit → elle part vers la DROITE de
-    // la benne (+x local) → signe MOINS sur l'inertie (négative×-1=+).
-    // Virage à droite → vers la gauche. Comme une passagère réelle !
-    poule.position.x = poule.xBase - poule.inertie * 0.55;
-    // AGITATION : quand la glissée atteint la ridelle, la poule
-    // s'affole — tremblement + battement d'ailes + sursaut,
-    // proportionnels à l'enfoncement dans le bord.
-    const distanceBord = Math.abs(poule.inertie) * 0.55; // déplacement depuis le repos
-    const LIMITE_BENNE = 0.62;                            // ridelle (bord interne de la benne)
-    if (distanceBord > LIMITE_BENNE) {
-      const affolee = Math.min(1, (distanceBord - LIMITE_BENNE) / 0.15);
+    poule.rotation.z = -poule.inertie * 0.35;
+    // glissée brute par inertie (non bornée : sert à mesurer le contact)
+    const xGlisse = poule.xBase + poule.inertie * 0.55;
+    // BORNE PHYSIQUE : la poule ne traverse JAMAIS la ridelle — elle
+    // est bloquée au bord (comme une vraie ridelle), et l'agitation
+    // se déclenche quand la glissée brute dépasse la borne.
+    const xBorne = Math.max(-BORD_BENNE, Math.min(BORD_BENNE, xGlisse));
+    poule.position.x = xBorne;
+    // AGITATION au contact de la ridelle : proportionnelle au dépassement
+    const depassement = Math.abs(xGlisse) - BORD_BENNE;
+    if (depassement > 0) {
+      const affolee = Math.min(1, depassement / 0.15);
       const t = tMaintenant;
-      poule.position.x += Math.sin(t * 38 + poule.phase) * 0.04 * affolee; // tremblement
+      poule.position.x += Math.sin(t * 38 + poule.phase) * 0.03 * affolee; // tremblement (petit, reste dans la benne)
       poule.rotation.z += Math.sin(t * 26 + poule.phase) * 0.2 * affolee;  // battement d'ailes
       poule.rotation.x = Math.sin(t * 32 + poule.phase) * 0.12 * affolee;  // cabre
       poule.position.y = HAUTEUR_ROUTE + 0.72 + Math.abs(Math.sin(t * 20 + poule.phase)) * 0.09 * affolee;
     } else {
       poule.position.y = HAUTEUR_ROUTE + 0.72; // retour au plancher
-      poule.rotation.x = 0; // (plus de picorage de tête : le mouvement est retiré)
+      poule.rotation.x = 0;
     }
   }
 
