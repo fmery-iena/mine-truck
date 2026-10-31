@@ -114,7 +114,7 @@
 <body>
 <div id="hud">
   <span id="tour">&#127937; Tour 1</span>
-  <span id="version">v7 &middot; 4792263</span>
+  <span id="version">v8 &middot; pending</span>
 </div>
 <div id="chrono">TOUR : 00:00:00
 DERNIER : 00:00:00
@@ -1716,13 +1716,20 @@ function update() {
     if (obs.type === 'vache') {
       // La vache est poussée dans la direction du choc (elle reste
       // posée sur le sol vallonné) ; la voiture ralentit un peu.
-      // Plus de toupie (spin) : simple ralentissement.
       const poussee = distMin - d;
       obs.x += nx * poussee;
       obs.z += nz * poussee;
       obs.mesh.position.set(obs.x, hauteurTerrain(obs.x, obs.z), obs.z);
       voiture.vitesse *= 0.7;
       meuh();
+      // TOUPIE (spin-out) UNIQUEMENT si la vache est SUR LA ROUTE :
+      // on teste la distance de la vache à la piste (pas celle de la
+      // voiture) — une vache dans l'herbe ne fait que se faire pousser.
+      const vacheSurPiste = pointLePlusProcheGlobal(obs.x, obs.z).distance < demi;
+      if (vacheSurPiste && voiture.tempsSpin <= 0) {
+        voiture.tempsSpin = CONFIG.spinDuree;
+        voiture.capDeplacement = voiture.cap; // glisse tout droit pendant la vrille
+      }
     } else {
       // SOLIDE (clôture, arbre, maison, ferme) — rebond léger contrôlé :
       // 1) on replace la voiture au point de contact, avec une petite
