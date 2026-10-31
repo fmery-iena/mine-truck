@@ -1697,40 +1697,38 @@ function update() {
       const nx = dx / d, nz = dz / d;   // normale du contact
 
       if (obs.type === 'vache') {
-        // OPTION A : la vache glisse doucement devant la voiture
+        // La vache glisse doucement devant la voiture (pas de toupie :
+        // plus de spin-out, la voiture ralentit juste un peu).
         const poussee = distMin - d;
         obs.x -= nx * poussee;
         obs.z -= nz * poussee;
         // même fix : la vache poussée reste posée sur le sol vallonné
         obs.mesh.position.set(obs.x, hauteurTerrain(obs.x, obs.z), obs.z);
-        voiture.vitesse *= 0.5; // le choc freine nettement
-        // TOUR SUR SOI-MÊME façon Mario Kart : le pickup part
-        // en toupie pendant spinDuree secondes (un tour complet).
-        if (voiture.tempsSpin <= 0) {
-          voiture.tempsSpin = CONFIG.spinDuree;
-          voiture.capDeplacement = voiture.cap; // on glisse tout droit pendant la vrille
-        }
+        voiture.vitesse *= 0.7; // ralentissement modéré au contact
         meuh();
       } else {
-        // SOLIDE — APPROCHE A (glissement) :
+        // SOLIDE (clôture, arbre, maison, ferme) — rebond léger contrôlé :
         // 1) on repositionne sur la surface avec une petite marge
-        //    (+0.05) pour ne pas re-collider à chaque frame
+        //    (+0.05) pour ne pas re-collider à chaque frame (anti-blocage)
         const poussee = distMin - d + 0.05;
         voiture.x += nx * poussee;
         voiture.z += nz * poussee;
-        // 2) on ne supprime que la composante de la vitesse qui
-        //    pointe VERS l'obstacle (produit scalaire avec la
-        //    normale). La composante tangentielle est conservée :
-        //    la voiture GLISSE le long du mur au lieu de rebondir.
+        // 2) composantes de la vitesse : normale (vers l'obstacle) et
+        //    tangentielle (le long de l'obstacle)
         const vx = Math.sin(voiture.cap) * voiture.vitesse;
         const vz = Math.cos(voiture.cap) * voiture.vitesse;
         const versObstacle = -(vx * nx + vz * nz); // >0 si on fonce dessus
         if (versObstacle > 0) {
-          // retire la part qui rentre dans l'obstacle
-          const nvx = vx + nx * versObstacle;
-          const nvz = vz + nz * versObstacle;
-          // léger frottement au contact : frotter un mur coûte un peu
-          voiture.vitesse = Math.sign(voiture.vitesse) * Math.hypot(nvx, nvz) * 0.98;
+          // 3) REBOND LÉGER : on inverse une petite partie de la composante
+          //    normale (REBOND = 0.25 → la voiture repart à 25 % de sa
+          //    vitesse d'impact, pas un gros choc) et on garde 90 % de la
+          //    composante tangentielle → petit décalage latéral naturel,
+          //    la voiture glisse le long de la barrière sans rester coincée.
+          const REBOND = 0.25;
+          const GARD_TANGENT = 0.90;
+          const nvx = vx * GARD_TANGENT + nx * versObstacle * REBOND;
+          const nvz = vz * GARD_TANGENT + nz * versObstacle * REBOND;
+          voiture.vitesse = Math.sign(voiture.vitesse) * Math.hypot(nvx, nvz) * 0.85; // frottement au contact
         }
       }
     }
