@@ -270,22 +270,30 @@ scene.add(new THREE.AmbientLight(0xBFD9FF, 0.5)); // ambiance ciel
    pavés le long de la courbe. Pour modifier le circuit,
    il suffit de changer les POINTS_CIRCUIT ci-dessous !
    ========================================================= */
+/* =========================================================
+   RÉGLAGES DE CONDUITE — tout est ajustable ici.
+   La vitesse max a été nettement relevée (0.55 → 1.15) et
+   l'accélération doublée : la voiture est plus vive.
+   vitesseVirage monte en proportion (0.032 → 0.055) pour
+   garder le même ressenti de contrôle à haute vitesse
+   (sinon la voiture tournerait « trop large » en allant vite).
+   ========================================================= */
 const CONFIG = {
   largeurRoute: 20, // route 2x plus large qu'avant (était 10)
-  vitesseMax: 0.55,
-  vitesseHerbe: 0.22,   // vitesse max quand on est dans l'herbe
-  acceleration: 0.012,
-  freinage: 0.03,
-  ralentissement: 0.004,
-  vitesseVirage: 0.032, // vitesse de rotation du pickup (réduite : virages plus progressifs)
+  vitesseMax: 1.15,            // vitesse max sur la piste (était 0.55)
+  vitesseHerbe: 0.45,          // vitesse max quand on est dans l'herbe (était 0.22)
+  acceleration: 0.028,         // accélération (était 0.012) : reprise plus franche
+  freinage: 0.06,              // freinage renforcé aussi (était 0.03)
+  ralentissement: 0.006,       // ralentissement naturel (était 0.004)
+  vitesseVirage: 0.055, // vitesse de rotation du pickup, relevée avec la vitesse (était 0.032)
   vitesseMonteeVirage: 3.5,   // rapidité à laquelle la direction prend effet (montée douce)
   vitesseDescenteVirage: 5.0, // rapidité à laquelle la direction se relâche quand on lâche
   vitesseLaterale: 0.22,
-  boostVitesse: 1.30,          // vitesse instantanée quand on roule sur un panneau d'accélération (2.4x la vitesse max !)
+  boostVitesse: 2.4,           // vitesse instantanée sur un panneau d'accélération (~2x la vitesse max)
   boostDuree: 1.2,             // durée du boost en secondes
-  tremplinVitesseVerticale: 9.0,  // impulsion verticale au décollage (force du saut)
-  tremplinGravite: 14.0,          // gravité pendant le vol (descente progressive)
-  tremplinBoostAtterrissage: 1.0, // boost reçu au moment de retoucher le sol
+  tremplinVitesseVerticale: 11.0, // impulsion verticale au décollage (un peu plus forte à haute vitesse)
+  tremplinGravite: 18.0,          // gravité pendant le vol (descente progressive)
+  tremplinBoostAtterrissage: 2.2, // boost reçu au moment de retoucher le sol
   spinDuree: 1.0,              // durée du tour sur soi-même après un choc de vache (s)
   spinTours: 1.0,              // nombre de tours complets (1 = 360°)
 };
@@ -642,8 +650,9 @@ for (let i = 0; i < NB_ECHANTILLONS; i++) {
 /* --- Clôtures en bois le long de la route : surtout dans la
    section pré (serpentin) et autour de la zone des bosses.
    Barrières voxel : 2 piquets + 2 traverses par section, posées
-   tous les 3 pavés. AUCUNE collision (décor pur) pour garder
-   la conduite fluide — elles marquent visuellement les bords. */
+   tous les 3 pavés. CHAQUE PIQUET enregistre un obstacle SOLIDE
+   (rayon 0.7) : la clôture bloque vraiment la voiture, on ne peut
+   plus la traverser. Les traverses restent purement visuelles. */
 function creerCloture(px, pz, py, angle, pente) {
   const g = new THREE.Group();
   const BOIS = 0x8D6E63;
@@ -657,6 +666,8 @@ function creerCloture(px, pz, py, angle, pente) {
     g.add(bloc(0.35, longueur, 0.35, BOIS_SOMBRE, bx, py + longueur / 2 - Math.abs(pente) * 2, bz));
     g.add(bloc(0.12, 0.18, 3.2, BOIS, bx, py + 1.25, bz));                 // traverse haute
     g.add(bloc(0.12, 0.18, 3.2, BOIS, bx, py + 0.7, bz));                  // traverse basse
+    // Collision solide sur le piquet (position monde, le groupe n'est pas encore placé)
+    enregistrerObstacle(bx, bz, 0.7, 'solide', g);
   }
   return g;
 }
@@ -667,7 +678,10 @@ const SECTIONS_CLOTURES = [
   [Math.floor(NB_ECHANTILLONS * 0.70), Math.floor(NB_ECHANTILLONS * 0.87)],  // zone des bosses
 ];
 for (const [debut, fin] of SECTIONS_CLOTURES) {
-  for (let i = debut; i < fin; i += 3) {
+  // Espacement de 2 pavés (~4 blocs) : avec le rayon de collision
+  // voiture (1.2) + piquet (0.7) = 1.9 de chaque côté, deux piquets
+  // à 4 blocs se touchent → aucun trou, la clôture bloque partout.
+  for (let i = debut; i < fin; i += 2) {
     const p = echantillons[i];
     const tang = tangentes[i];
     const angle = Math.atan2(tang.x, tang.z);
