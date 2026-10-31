@@ -114,7 +114,7 @@
 <body>
 <div id="hud">
   <span id="tour">&#127937; Tour 1</span>
-  <span id="version">v5 &middot; 535f6cb</span>
+  <span id="version">v6 &middot; pending</span>
 </div>
 <div id="chrono">TOUR : 00:00:00
 DERNIER : 00:00:00
@@ -790,12 +790,15 @@ function creerTremplin(indice) {
   tremplin.rotation.y = angle;
   scene.add(tremplin);
 
-  // Décollage au SOMMET de la rampe, dans le SENS DE COURSE
-  // (inverse de la tangente) : la voiture remonte toute la
-  // rampe puis saute au niveau de la bande rouge.
-  const sx = p.x - tangente.x * (TREMPLIN_LONGUEUR / 2 - 1);
-  const sz = p.z - tangente.z * (TREMPLIN_LONGUEUR / 2 - 1);
-  tremplins.push({ x: sx, z: sz, rayon: 2.2 });
+  // Zone de détection : rectangle centré sur le tremplin, aligné sur
+  // la direction de la piste. On mémorise le repère local (cos/sin de
+  // l'angle) + les demi-dimensions pour un test rapide par frame.
+  tremplins.push({
+    x: p.x, z: p.z,
+    cosA: Math.cos(angle), sinA: Math.sin(angle),
+    demiLarg: TREMPLIN_LARGEUR / 2,   // toute la largeur du tremplin
+    demiLong: TREMPLIN_LONGUEUR / 2,  // toute sa longueur
+  });
 }
 
 creerTremplin(Math.floor(NB_ECHANTILLONS * 0.56));  // section 5 : rampe en sortie de prairie
@@ -1616,11 +1619,20 @@ function update() {
   // impulsion verticale. En vol, la gravité tire progressivement
   // vers le bas : montée douce puis redescente douce (~1.2 s).
   // À l'atterrissage (altitude repasse sous 0) : boost de relance.
+  // DÉTECTION EN RECTANGLE ALIGNÉ sur la piste (pas un cercle étroit) :
+  // coordonnées locales de la voiture dans le repère du tremplin
+  // (origine = centre, axe Z local = sens de la piste) → on déclenche
+  // dès qu'on est dans la largeur du tremplin et sur sa longueur,
+  // même si on n'est pas parfaitement centré.
   if (!voiture.enVol) {
     for (const tr of tremplins) {
+      if (voiture.vitesse <= 0) break;
       const dx = voiture.x - tr.x;
       const dz = voiture.z - tr.z;
-      if (voiture.vitesse > 0 && dx * dx + dz * dz < tr.rayon * tr.rayon) {
+      // repère local du tremplin : u = latéral, v = le long de la piste
+      const u = dx * tr.cosA - dz * tr.sinA;
+      const v = dx * tr.sinA + dz * tr.cosA;
+      if (Math.abs(u) < tr.demiLarg + 1.5 && Math.abs(v) < tr.demiLong + 1.5) {
         voiture.enVol = true;
         voiture.vitesseVerticale = CONFIG.tremplinVitesseVerticale;
         voiture.tempsBoost = 0; // le boost en cours est remplacé par le vol
@@ -1754,12 +1766,22 @@ function update() {
     voiture.hauteurRoute += (cible - voiture.hauteurRoute) * 0.4;
   }
 
-  // Dans l'herbe : la vitesse est limitée (et on ralentit vite)
+  // Vitesse selon la surface, avec TRANSITION FLUIDE :
+  // - sur la route : plafond = vitesseMax (on garde sa vitesse)
+  // - dans l'herbe : on fait glisser la vitesse vers vitesseHerbe
+  //   progressivement (lerp doux, ~0.06 par frame) au lieu d'un
+  //   freinage brutal → la voiture ralentit nettement mais reste
+  //   contrôlable, et la reprise sur la route est tout aussi douce.
   const vitessePlafond = voiture.tempsBoost > 0
     ? CONFIG.boostVitesse  // boost actif : plafond temporairement relevé
     : (voiture.surPiste ? CONFIG.vitesseMax : CONFIG.vitesseHerbe);
-  if (voiture.vitesse > vitessePlafond) {
-    voiture.vitesse = Math.max(vitessePlafond, voiture.vitesse - 0.02);
+  if (voiture.surPiste || voiture.tempsBoost > 0) {
+    // sur la route : on ne freine pas artificiellement, on laisse la
+    // vitesse monter naturellement jusqu'au plafond
+    if (voiture.vitesse > vitessePlafond) voiture.vitesse = vitessePlafond;
+  } else {
+    // dans l'herbe : approche douce du plafond herbe (transition fluide)
+    voiture.vitesse += (vitessePlafond - voiture.vitesse) * 0.06;
   }
 
   // Compteur de tours : franchir la ligne de damier.
