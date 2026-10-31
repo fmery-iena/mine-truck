@@ -114,7 +114,7 @@
 <body>
 <div id="hud">
   <span id="tour">&#127937; Tour 1</span>
-  <span id="version">v6 &middot; 963c5e5</span>
+  <span id="version">v7 &middot; pending</span>
 </div>
 <div id="chrono">TOUR : 00:00:00
 DERNIER : 00:00:00
@@ -289,11 +289,11 @@ const CONFIG = {
   vitesseMonteeVirage: 3.5,   // rapidité à laquelle la direction prend effet (montée douce)
   vitesseDescenteVirage: 5.0, // rapidité à laquelle la direction se relâche quand on lâche
   vitesseLaterale: 0.22,
-  boostVitesse: 2.4,           // vitesse instantanée sur un panneau d'accélération (~2x la vitesse max)
-  boostDuree: 1.2,             // durée du boost en secondes
+  boostVitesse: 1.6,           // vitesse instantanée sur un panneau d'accélération (~1.4x la vitesse max)
+  boostDuree: 1.0,             // durée du boost en secondes
   tremplinVitesseVerticale: 11.0, // impulsion verticale au décollage (un peu plus forte à haute vitesse)
   tremplinGravite: 18.0,          // gravité pendant le vol (descente progressive)
-  tremplinBoostAtterrissage: 2.2, // boost reçu au moment de retoucher le sol
+  tremplinBoostAtterrissage: 1.5, // boost reçu au moment de retoucher le sol
   spinDuree: 1.0,              // durée du tour sur soi-même après un choc de vache (s)
   spinTours: 1.0,              // nombre de tours complets (1 = 360°)
 };
@@ -1689,59 +1689,58 @@ function update() {
   // Avancer : pendant le spin, la trajectoire reste droite
   // (capDeplacement) alors que le châssis tourne sur lui-même.
   const capDeplacement = voiture.tempsSpin > 0 ? voiture.capDeplacement : voiture.cap;
+  // Position AVANT le déplacement : sert au test segment-cercle ci-dessous
+  const avX = voiture.x, avZ = voiture.z;
   voiture.x += Math.sin(capDeplacement) * voiture.vitesse;
   voiture.z += Math.cos(capDeplacement) * voiture.vitesse;
 
   // --- COLLISIONS ---
-  // La voiture est un cercle (rayon 1.8). Contre un obstacle
-  // SOLIDE (barrière, maison, arbre) : on est repoussé le long
-  // de la normale et la vitesse est amortie (rebond doux,
-  // jamais de blocage violent). Contre une VACHE : c'est la
-  // vache qui se fait pousser (option A) + petit meuh !
-  const RAYON_VOITURE = 1.2; // resserré : la voiture ne doit être freinée qu'au vrai contact
+  // Test SEGMENT-CERCLE : on projette chaque obstacle sur le segment
+  // parcouru pendant cette frame. Même à fond de boost (1.6+ blocs
+  // par frame), la voiture ne peut plus « sauter par-dessus » une
+  // vache ou une barrière (tunneling) : le contact est toujours détecté.
+  const RAYON_VOITURE = 1.2;
+  const segX = voiture.x - avX, segZ = voiture.z - avZ;
+  const segLen2 = segX * segX + segZ * segZ || 1e-9;
   for (const obs of obstacles) {
-    const dx = voiture.x - obs.x;
-    const dz = voiture.z - obs.z;
     const distMin = RAYON_VOITURE + obs.rayon;
-    const d2 = dx * dx + dz * dz;
-    if (d2 < distMin * distMin) {
-      const d = Math.sqrt(d2) || 0.001; // évite la division par zéro
-      const nx = dx / d, nz = dz / d;   // normale du contact
+    // point du segment de déplacement le plus proche du centre de l'obstacle
+    let t = ((obs.x - avX) * segX + (obs.z - avZ) * segZ) / segLen2;
+    t = Math.max(0, Math.min(1, t));
+    const cx = avX + segX * t, cz = avZ + segZ * t;
+    const dx = obs.x - cx, dz = obs.z - cz;
+    const d = Math.hypot(dx, dz);
+    if (d >= distMin) continue;
+    const nx = dx / (d || 0.001), nz = dz / (d || 0.001); // normale contact → obstacle
 
-      if (obs.type === 'vache') {
-        // La vache glisse doucement devant la voiture (pas de toupie :
-        // plus de spin-out, la voiture ralentit juste un peu).
-        const poussee = distMin - d;
-        obs.x -= nx * poussee;
-        obs.z -= nz * poussee;
-        // même fix : la vache poussée reste posée sur le sol vallonné
-        obs.mesh.position.set(obs.x, hauteurTerrain(obs.x, obs.z), obs.z);
-        voiture.vitesse *= 0.7; // ralentissement modéré au contact
-        meuh();
-      } else {
-        // SOLIDE (clôture, arbre, maison, ferme) — rebond léger contrôlé :
-        // 1) on repositionne sur la surface avec une petite marge
-        //    (+0.05) pour ne pas re-collider à chaque frame (anti-blocage)
-        const poussee = distMin - d + 0.05;
-        voiture.x += nx * poussee;
-        voiture.z += nz * poussee;
-        // 2) composantes de la vitesse : normale (vers l'obstacle) et
-        //    tangentielle (le long de l'obstacle)
-        const vx = Math.sin(voiture.cap) * voiture.vitesse;
-        const vz = Math.cos(voiture.cap) * voiture.vitesse;
-        const versObstacle = -(vx * nx + vz * nz); // >0 si on fonce dessus
-        if (versObstacle > 0) {
-          // 3) REBOND LÉGER : on inverse une petite partie de la composante
-          //    normale (REBOND = 0.25 → la voiture repart à 25 % de sa
-          //    vitesse d'impact, pas un gros choc) et on garde 90 % de la
-          //    composante tangentielle → petit décalage latéral naturel,
-          //    la voiture glisse le long de la barrière sans rester coincée.
-          const REBOND = 0.25;
-          const GARD_TANGENT = 0.90;
-          const nvx = vx * GARD_TANGENT + nx * versObstacle * REBOND;
-          const nvz = vz * GARD_TANGENT + nz * versObstacle * REBOND;
-          voiture.vitesse = Math.sign(voiture.vitesse) * Math.hypot(nvx, nvz) * 0.85; // frottement au contact
-        }
+    if (obs.type === 'vache') {
+      // La vache est poussée dans la direction du choc (elle reste
+      // posée sur le sol vallonné) ; la voiture ralentit un peu.
+      // Plus de toupie (spin) : simple ralentissement.
+      const poussee = distMin - d;
+      obs.x += nx * poussee;
+      obs.z += nz * poussee;
+      obs.mesh.position.set(obs.x, hauteurTerrain(obs.x, obs.z), obs.z);
+      voiture.vitesse *= 0.7;
+      meuh();
+    } else {
+      // SOLIDE (clôture, arbre, maison, ferme) — rebond léger contrôlé :
+      // 1) on replace la voiture au point de contact, avec une petite
+      //    marge (+0.05) pour ne pas re-collider à chaque frame
+      voiture.x = cx - nx * (distMin + 0.05);
+      voiture.z = cz - nz * (distMin + 0.05);
+      // 2) REBOND LÉGER : on ré-inverse 25 % de la composante normale
+      //    (vitesse d'impact) et on garde 90 % de la composante
+      //    tangentielle → petit décalage latéral, jamais de gros choc.
+      const vx = Math.sin(voiture.cap) * voiture.vitesse;
+      const vz = Math.cos(voiture.cap) * voiture.vitesse;
+      const versObstacle = vx * nx + vz * nz; // >0 si on fonce dessus
+      if (versObstacle > 0) {
+        const REBOND = 0.25;
+        const GARD_TANGENT = 0.90;
+        const nvx = vx * GARD_TANGENT - nx * versObstacle * REBOND;
+        const nvz = vz * GARD_TANGENT - nz * versObstacle * REBOND;
+        voiture.vitesse = Math.sign(voiture.vitesse) * Math.hypot(nvx, nvz) * 0.85; // frottement au contact
       }
     }
   }
