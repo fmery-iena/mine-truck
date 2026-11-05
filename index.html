@@ -333,69 +333,33 @@ function bloc(largeur, hauteur, profondeur, couleur, x, y, z) {
    courbes larges, petits virages en S, retour en épingle
    douce. Pour créer un NOUVEAU circuit, il suffit de
    changer ces points ! */
-/* Le circuit est agrandi proportionnellement : chaque point de
-   passage est multiplié par ECHELLE_CIRCUIT, donc les virages,
-   les lignes droites et tout le tracé gardent exactement les
-   mêmes proportions (2x plus grand pour la route 2x plus large). */
-const ECHELLE_CIRCUIT = 2; // 2 = circuit 2x plus grand (cohérent avec largeurRoute 2x)
-/* --- CIRCUIT « PRAIRIE MEUH MEUH » v3 : GÉNÉRATION POLAIRE PAR SECTIONS.
-   Le tracé est défini en COORDONNÉES POLAIRES : un rayon de base
-   R=160 + des ondulations locales (fenêtres triangulaires centrées
-   sur une fraction f du tour, 0 = ligne de départ). Une courbe
-   polaire r(f) > 0 ne PEUT PAS s'auto-croiser : la boucle est
-   continue et fermée par construction.
-
-   Les 8 sections dans l'ordre (f = fraction du tour) :
-     1. f≈0.00  ligne de départ + courte ligne droite
-     2. f≈0.125 premier virage GAUCHE long et progressif (-14)
-     3. f≈0.27  entrée dans la prairie, nouveau virage gauche (-10)
-     4. f≈0.43  section prairie : 2-3 courbes douces en S (sin)
-     5. f≈0.56  sortie de prairie, léger virage DROITE (+8) + rampe
-     6. f≈0.645 virage gauche après la rampe (-12)
-     7. f≈0.78  zone des bosses : ondulations radiales + 4 bosses
-                de hauteur réelles sur la route
-     8. f≈0.925 dernier virage gauche (-10) vers l'arrivée
-
-   Validation numérique (Node) : r min = 146 > 0, distance min
-   entre brins non voisins = 42 blocs (route 20 + marge), rayon de
-   courbure min = 48 → aucun virage serré. La hauteur h(f) monte
-   doucement (sin) et les 4 bosses gaussiennes de la section 7 sont
-   de vraies variations d'altitude prises en compte par la voiture. */
-const TAU = Math.PI * 2;
-function fen(f, centre, largeur) { // fenêtre triangulaire localisée (f en fraction de tour)
-  let d = f - centre;
-  d = Math.atan2(Math.sin(d * TAU), Math.cos(d * TAU)) / TAU; // distance angulaire bouclée
-  return Math.max(0, 1 - Math.abs(d) / largeur);
-}
-const RAYON_CIRCUIT = 160;   // rayon de base (→ circuit ~1000 blocs de tour)
-const NOMBRE_POINTS = 44;    // points de passage générés
-function rayonCircuit(f) {
-  let v = RAYON_CIRCUIT;
-  v -= 14 * fen(f, 0.125, 0.16);   // 2. virage gauche long
-  v -= 10 * fen(f, 0.27, 0.10);    // 3. entrée prairie, virage gauche
-  v += 7 * Math.sin(2.5 * TAU * f + 0.6) * fen(f, 0.43, 0.12); // 4. serpentin en S
-  v += 8  * fen(f, 0.56, 0.06);     // 5. sortie prairie, léger virage droite
-  v -= 12 * fen(f, 0.645, 0.10);    // 6. virage gauche après la rampe
-  v += 5 * Math.sin(4 * TAU * f) * fen(f, 0.78, 0.10); // 7. ondulations zone des bosses
-  v -= 10 * fen(f, 0.925, 0.11);    // 8. dernier virage gauche
-  return v;
-}
-const BOSSES_H = [0.72, 0.76, 0.80, 0.84]; // positions des 4 bosses de hauteur (section 7)
-function hauteurCircuit(f) {
-  let v = 2.2 + 2.0 * Math.sin(TAU * f - Math.PI / 2); // montée douce vers le fond
-  for (const b of BOSSES_H) { // vraies bosses sur la route en section 7
-    const d = Math.atan2(Math.sin((f - b) * TAU), Math.cos((f - b) * TAU)) / TAU;
-    v += 2.2 * Math.exp(-(d * d) / (2 * 0.02 * 0.02));
-  }
-  return v;
+/* --- CIRCUIT « VOLCAN » : une route en ÉPINGLE au-dessus du volcan.
+   On monte à flanc du volcan par la voie OUEST (x = -15), on fait
+   le DEMI-TOUR AU SOMMET (boucle autour du cratère, rayon ~13 m :
+   assez large pour tourner tout en avançant), puis on REDESCEND par
+   la voie EST (x = +15), et on refait un demi-tour EN BAS pour
+   repartir, toujours en avançant. Les deux voies sont écartées de
+   30 m (route 20 + 10 m d'herbe entre les deux) : la recherche du
+   point de piste le plus proche ne peut pas confondre montée et
+   descente. Pour changer le tracé : éditer la liste ci-dessous. */
+/* Cône du volcan : centre (0, 256), rayon de base 85, hauteur 16.
+   La hauteur de la route en chaque point = hauteur du cône à cet
+   endroit → la route épouse exactement le flanc du volcan. */
+const VOLCAN = { x: 0, z: 256, R: 85, H: 16 };
+function hauteurVolcan(x, z) {
+  const d = Math.hypot(x - VOLCAN.x, z - VOLCAN.z);
+  return VOLCAN.H * Math.max(0, 1 - d / VOLCAN.R);
 }
 const POINTS_CIRCUIT = [];
-for (let i = 0; i < NOMBRE_POINTS; i++) {
-  const f = i / NOMBRE_POINTS;
-  const th = f * TAU;
-  const r = rayonCircuit(f);
-  POINTS_CIRCUIT.push([r * Math.cos(th), r * Math.sin(th), hauteurCircuit(f)]);
+function ajoutPoint(x, z) {
+  POINTS_CIRCUIT.push([x, z, hauteurVolcan(x, z)]);
 }
+ajoutPoint(0, 26);                                   // ligne de départ, en bas
+ajoutPoint(-8, 29); ajoutPoint(-15, 42);             // demi-tour du bas (voie ouest)
+ajoutPoint(-15, 95); ajoutPoint(-15, 150); ajoutPoint(-15, 205); ajoutPoint(-15, 245); // montée ouest
+ajoutPoint(-10, 264); ajoutPoint(0, 274); ajoutPoint(10, 264);     // DEMI-TOUR AU SOMMET
+ajoutPoint(15, 245); ajoutPoint(15, 205); ajoutPoint(15, 150); ajoutPoint(15, 95); ajoutPoint(15, 42); // descente est
+ajoutPoint(8, 29);                                   // retour vers la ligne de départ
 const courbe = new THREE.CatmullRomCurve3(
   POINTS_CIRCUIT.map(([x, z, h]) => new THREE.Vector3(x, h, z)),
   true,   // fermé : la boucle revient au départ
@@ -539,10 +503,11 @@ matSolDessus.onBeforeCompile = (shader) => {
    se fondent avec ses montées. Résolution 96x96 : assez fin pour
    des collines, léger pour le GPU (1 draw call). */
 function hauteurTerrainBrute(x, z) {
-  // collines douces, amplitude modérée
+  // collines douces, amplitude modérée + CÔNE DU VOLCAN
   return 2.2 * Math.sin(x * 0.018) * Math.cos(z * 0.015)
        + 1.4 * Math.sin(x * 0.045 + 1.3) * Math.cos(z * 0.04 + 0.6)
-       + 0.8 * Math.sin((x + z) * 0.09);
+       + 0.8 * Math.sin((x + z) * 0.09)
+       + hauteurVolcan(x, z);
 }
 /* Le terrain se FOND avec la route : à proximité de la piste
    (dist < demi+8), on interpole entre la hauteur de la ROUTE
@@ -563,7 +528,7 @@ function hauteurTerrain(x, z) {
   return Math.max(0, hPiste + (hBrute - hPiste) * k);
 }
 const TERRAILLE_T = 96;                 // résolution du maillage
-const geoTerrain = new THREE.PlaneGeometry(520, 520, TERRAILLE_T, TERRAILLE_T);
+const geoTerrain = new THREE.PlaneGeometry(680, 680, TERRAILLE_T, TERRAILLE_T);
 geoTerrain.rotateX(-Math.PI / 2);       // à plat, normal vers le haut
 {
   const pos = geoTerrain.attributes.position;
@@ -573,9 +538,28 @@ geoTerrain.rotateX(-Math.PI / 2);       // à plat, normal vers le haut
   geoTerrain.computeVertexNormals();
 }
 const sol = new THREE.Mesh(geoTerrain, matSolDessus); // herbe texturée dessus
-sol.position.set(0, 0, 0);
+sol.position.set(0, 0, 90); // décalé vers +Z : le volcan (z≈256) tient dans le terrain
 sol.receiveShadow = true; // le sol accueille les ombres portées
 scene.add(sol);
+
+/* --- Cratère du volcan : lave incandescente au sommet + panache de
+   fumée grise (blocs translucides qui montent). Le sommet du cône
+   (hauteur 16) dépasse la boucle du demi-tour (~13-14). --- */
+{
+  const lave = new THREE.Mesh(
+    new THREE.CylinderGeometry(5.5, 8, 1.4, 12),
+    new THREE.MeshLambertMaterial({ color: 0xFF5722, emissive: 0xFF3D00, emissiveIntensity: 1.2 })
+  );
+  lave.position.set(VOLCAN.x, hauteurTerrain(VOLCAN.x, VOLCAN.z) + 0.5, VOLCAN.z);
+  scene.add(lave);
+  const matFumee = new THREE.MeshLambertMaterial({ color: 0x616161, transparent: true, opacity: 0.55 });
+  for (let i = 0; i < 4; i++) {
+    const n = new THREE.Mesh(geoCube, matFumee);
+    n.scale.set(3 + i, 2.2, 3 + i);
+    n.position.set(VOLCAN.x + i * 0.8, hauteurTerrain(VOLCAN.x, VOLCAN.z) + 3 + i * 2.4, VOLCAN.z - i * 0.6);
+    scene.add(n);
+  }
+}
 
 /* Ombres portées : seuls les objets volumineux castent (sinon
    les ~4000 pavés explosent le coût du rendu d'ombres). */
@@ -749,8 +733,8 @@ function creerZoneBoost(indice) {
 
 // Deux panneaux : au début de la ligne droite après le départ
 // (f≈0.06, section 1) et en pleine section prairie (f≈0.50).
-creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.06));
-creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.50));
+creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.06));  // en bas, juste après la ligne de départ
+creerZoneBoost(Math.floor(NB_ECHANTILLONS * 0.80));  // partie plate de la descente est
 
 /* --- TREMPLINS : entre les deux zones d'accélération (40% et
    80% du circuit). Même taille que les accélérateurs (60% de la
@@ -801,8 +785,8 @@ function creerTremplin(indice) {
   });
 }
 
-creerTremplin(Math.floor(NB_ECHANTILLONS * 0.56));  // section 5 : rampe en sortie de prairie
-creerTremplin(Math.floor(NB_ECHANTILLONS * 0.76));  // section 7 : permet de sauter par-dessus une bosse
+creerTremplin(Math.floor(NB_ECHANTILLONS * 0.90));  // en bas, sur le demi-tour inférieur (plat)
+creerTremplin(Math.floor(NB_ECHANTILLONS * 0.76));  // descente est, partie plate
 
 /* =========================================================
    3. LE DÉCOR : ARBRES, MAISONS ET VACHES
@@ -1019,14 +1003,10 @@ function creerFerme(x, z, ry) {
     scene.add(v);
   }
 }
-// Ferme à droite du premier virage (section 2, f≈0.14) : côté
-// extérieur du virage = rayon supérieur à celui de la piste.
+// Ferme à l'est de la route, en bas du volcan (hors de la piste :
+// voies à x = ±15, ferme à x = 48).
 {
-  const f = 0.14;
-  const p = courbe.getPointAt(f);
-  const rr = rayonCircuit(f) + 26; // 26 blocs hors de la route
-  const th = f * TAU;
-  const ferme = creerFerme(rr * Math.cos(th), rr * Math.sin(th), Math.random() * Math.PI * 2);
+  const ferme = creerFerme(48, 55, 0.6);
   activerOmbresPortees(ferme);
   scene.add(ferme);
 }

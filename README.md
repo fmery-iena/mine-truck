@@ -1,7 +1,7 @@
 # 🚗 Pickup Minecraft — Prairie Meuh Meuh
 
 Un jeu 3D style Minecraft, en HTML + JavaScript avec Three.js, fait pour un enfant de 9 ans.
-La voiture roule sur un vrai **circuit fermé avec des virages**, inspiré de la Prairie Meuh Meuh de Mario Kart Wii !
+La voiture gravit un **volcan** : montée à flanc, demi-tour au sommet autour du cratère, redescente, demi-tour en bas — toujours en avançant !
 
 ## 🎮 Jouer
 
@@ -17,12 +17,12 @@ Three.js est chargé via CDN : il faut juste une connexion internet.
 | ⬅️ ➡️ | Tourner (vrai virage : la voiture change de direction) |
 | Espace | Klaxon (canard) 🦆 |
 
-## 🏁 Le jeu
+## 🌋 Le jeu
 
-- Le circuit est une **boucle fermée** : grandes courbes, virages en S, retour en épingle douce.
+- Le circuit est une **route en épingle au-dessus d'un volcan** : montée à flanc (voie ouest), **demi-tour au sommet** autour du cratère de lave, redescente (voie est), **demi-tour en bas** pour repartir.
 - **Ligne de départ/arrivée en damier** : chaque passage = un tour de plus (compteur en haut).
 - Si tu sors de la piste, l'herbe **ralentit** le pickup — reviens sur l'asphalte !
-- Décor de prairie : **vaches 🐄**, arbres et maisons tout autour de la piste.
+- Décor : **vaches 🐄**, arbres et maisons dans la prairie, ferme en bas du volcan.
 
 ## 🛠️ Modifier le jeu
 
@@ -38,11 +38,11 @@ Tout le code est dans `index.html`, découpé en sections commentées :
 
 ### Créer un nouveau circuit 🗺️
 
-Le tracé est défini par la liste `POINTS_CIRCUIT` (des points `[x, z]` reliés
-en douceur). Change ces points et le circuit change ! Astuce : garde une
-bonne distance entre les points de passages opposés (au moins 25 blocs,
-la piste fait 10 blocs de large). `ECHELLE_CIRCUIT` (2 par défaut)
-agrandit tout le tracé proportionnellement.
+Le tracé est défini par la liste `POINTS_CIRCUIT` (des points `[x, z, h]` reliés
+en douceur, `h` = hauteur). Change ces points et le circuit change ! Astuce :
+garde une bonne distance entre les tronçons qui se longent (au moins 30 blocs
+avec une route de 20 de large), sinon la détection de la piste peut confondre
+les deux voies.
 
 `CONFIG.largeurRoute` (20 par défaut) règle la largeur de la route :
 accotements, lignes blanches, poteaux et ligne de damier suivent
