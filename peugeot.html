@@ -44,7 +44,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 /* ================= 1. CONFIG ================= */
 const CONFIG = {
-  couleurCarrosserie: 0x0b0b0d,   // noir obsidien
+  couleurCarrosserie: 0x15161a,   // noir obsidien légèrement éclairci pour lire sur fond noir
   rotationAuto: 0.9,              // vitesse de rotation lente (style Gran Turismo)
   distanceMin: 3.2,               // zoom mini
   distanceMax: 11,                // zoom maxi
@@ -57,14 +57,14 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.25;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000); // fond noir comme demandé
 
 const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(3.4, 1.7, 4.4); // vue 3/4 avant, façon garage GT
+camera.position.set(3.6, 1.6, 4.6); // vue 3/4 avant, façon garage GT
 
 // Environnement studio pour des reflets réalistes sur la peinture (vernis)
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -72,7 +72,7 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
 /* ================= 3. LUMIÈRES (éclairage venant du haut) ================= */
 // Key light : spot vertical depuis le plafond
-const key = new THREE.SpotLight(0xffffff, 900, 0, 0.55, 0.55, 1.8);
+const key = new THREE.SpotLight(0xffffff, 1200, 0, 0.55, 0.55, 1.8);
 key.position.set(0, 9, 0.5);
 key.target.position.set(0, 0.4, 0);
 key.castShadow = true;
@@ -81,19 +81,19 @@ key.shadow.bias = -0.0002;
 scene.add(key, key.target);
 
 // Lumières de rim (contre-jour latéral) pour découper la silhouette
-const rimG = new THREE.SpotLight(0xdfe9ff, 350, 0, 0.7, 0.8, 1.6);
+const rimG = new THREE.SpotLight(0xdfe9ff, 550, 0, 0.7, 0.8, 1.6);
 rimG.position.set(-5, 3.2, -4);
 rimG.target.position.set(0, 0.6, 0);
 scene.add(rimG, rimG.target);
 
-const rimD = new THREE.SpotLight(0xfff1de, 300, 0, 0.7, 0.8, 1.6);
+const rimD = new THREE.SpotLight(0xfff1de, 480, 0, 0.7, 0.8, 1.6);
 rimD.position.set(5, 2.6, -3.5);
 rimD.target.position.set(0, 0.6, 0);
 scene.add(rimD, rimD.target);
 
 // Remplissage doux frontal + ambiance minimale
-scene.add(new THREE.HemisphereLight(0xbfd4e6, 0x0a0a0a, 0.35));
-const fill = new THREE.DirectionalLight(0xffffff, 0.8);
+scene.add(new THREE.HemisphereLight(0xbfd4e6, 0x0a0a0a, 0.55));
+const fill = new THREE.DirectionalLight(0xffffff, 1.2);
 fill.position.set(2, 4, 6);
 scene.add(fill);
 
@@ -102,7 +102,7 @@ const sol = new Reflector(new THREE.CircleGeometry(28, 72), {
   clipBias: 0.003,
   textureWidth: window.innerWidth * renderer.getPixelRatio(),
   textureHeight: window.innerHeight * renderer.getPixelRatio(),
-  color: 0x8a8a8a, // reflet assombri
+  color: 0x9a9a9a, // reflet assombri
 });
 sol.rotation.x = -Math.PI / 2;
 sol.receiveShadow = true;
@@ -131,10 +131,10 @@ scene.add(ombre);
 const peinture = new THREE.MeshPhysicalMaterial({
   color: CONFIG.couleurCarrosserie,
   metalness: 0.25,
-  roughness: 0.30,
+  roughness: 0.28,
   clearcoat: 1.0,           // vernis
-  clearcoatRoughness: 0.06,
-  envMapIntensity: 1.0,
+  clearcoatRoughness: 0.05,
+  envMapIntensity: 1.35,
 });
 const vitre = new THREE.MeshPhysicalMaterial({
   color: 0x0a0e13, metalness: 0.9, roughness: 0.05,
@@ -156,19 +156,19 @@ const disqueFrein = new THREE.MeshStandardMaterial({ color: 0x8f9499, metalness:
    x = position longitudinale, w = demi-largeurs (bas / épaule / haut),
    y = hauteurs (bas de caisse / ligne de ceinture / dessus). */
 const STATIONS_CAISSE = [
-  { x: -2.345, wB: 0.001, wS: 0.001, wT: 0.001, yB: 0.55, yS: 0.55, yT: 0.55 }, // pointe AR
-  { x: -2.320, wB: 0.55,  wS: 0.62,  wT: 0.55,  yB: 0.28, yS: 0.68, yT: 0.90 }, // pare-choc AR
-  { x: -2.150, wB: 0.80,  wS: 0.86,  wT: 0.80,  yB: 0.16, yS: 0.78, yT: 0.99 }, // coffre
-  { x: -1.750, wB: 0.88,  wS: 0.905, wT: 0.85,  yB: 0.14, yS: 0.84, yT: 1.07 }, // ailes AR / hayon
-  { x: -1.300, wB: 0.90,  wS: 0.920, wT: 0.88,  yB: 0.13, yS: 0.86, yT: 1.11 }, // roues AR / portes AR
-  { x: -0.600, wB: 0.905, wS: 0.925, wT: 0.90,  yB: 0.13, yS: 0.87, yT: 0.87 }, // pied milieu (caisse ouverte)
-  { x: -0.100, wB: 0.905, wS: 0.925, wT: 0.90,  yB: 0.13, yS: 0.87, yT: 0.87 }, // montant de toit
-  { x:  0.450, wB: 0.900, wS: 0.920, wT: 0.88,  yB: 0.13, yS: 0.86, yT: 0.86 }, // base pare-brise
-  { x:  0.800, wB: 0.895, wS: 0.915, wT: 0.86,  yB: 0.13, yS: 0.84, yT: 1.11 }, // capot AR
-  { x:  1.400, wB: 0.880, wS: 0.900, wT: 0.82,  yB: 0.14, yS: 0.80, yT: 1.03 }, // capot
-  { x:  1.900, wB: 0.850, wS: 0.875, wT: 0.78,  yB: 0.16, yS: 0.76, yT: 0.95 }, // nez
-  { x:  2.200, wB: 0.760, wS: 0.800, wT: 0.68,  yB: 0.22, yS: 0.70, yT: 0.88 }, // bout du nez
-  { x:  2.345, wB: 0.001, wS: 0.001, wT: 0.001, yB: 0.55, yS: 0.55, yT: 0.55 }, // pointe AV
+  { x: -2.345, wB: 0.30,  wS: 0.34,  wT: 0.30,  yB: 0.42, yS: 0.62, yT: 0.78 }, // bout AR (moins pincé)
+  { x: -2.320, wB: 0.55,  wS: 0.62,  wT: 0.55,  yB: 0.24, yS: 0.66, yT: 0.88 }, // pare-choc AR
+  { x: -2.150, wB: 0.80,  wS: 0.86,  wT: 0.80,  yB: 0.14, yS: 0.76, yT: 0.97 }, // coffre
+  { x: -1.750, wB: 0.88,  wS: 0.905, wT: 0.85,  yB: 0.12, yS: 0.82, yT: 1.05 }, // ailes AR / hayon
+  { x: -1.300, wB: 0.90,  wS: 0.920, wT: 0.88,  yB: 0.11, yS: 0.845, yT: 1.08 }, // roues AR / portes AR
+  { x: -0.600, wB: 0.905, wS: 0.925, wT: 0.90,  yB: 0.11, yS: 0.85, yT: 0.85 }, // pied milieu (caisse ouverte)
+  { x: -0.100, wB: 0.905, wS: 0.925, wT: 0.90,  yB: 0.11, yS: 0.85, yT: 0.85 }, // montant de toit
+  { x:  0.450, wB: 0.900, wS: 0.920, wT: 0.88,  yB: 0.11, yS: 0.845, yT: 0.845 }, // base pare-brise
+  { x:  0.800, wB: 0.895, wS: 0.915, wT: 0.86,  yB: 0.12, yS: 0.82, yT: 1.06 }, // capot AR
+  { x:  1.400, wB: 0.880, wS: 0.900, wT: 0.82,  yB: 0.13, yS: 0.78, yT: 0.99 }, // capot
+  { x:  1.900, wB: 0.850, wS: 0.875, wT: 0.78,  yB: 0.15, yS: 0.73, yT: 0.90 }, // nez
+  { x:  2.200, wB: 0.760, wS: 0.800, wT: 0.68,  yB: 0.20, yS: 0.66, yT: 0.83 }, // bout du nez
+  { x:  2.345, wB: 0.30,  wS: 0.34,  wT: 0.30,  yB: 0.40, yS: 0.60, yT: 0.74 }, // bout AV (moins pincé)
 ];
 
 // Section transversale (y, z) d'une station de caisse.
@@ -226,12 +226,12 @@ scene.add(caisse);
 
 /* ================= 7. VERrière + TOIT ================= */
 const STATIONS_VITRAGE = [
-  { x:  0.55, wB: 0.78, wS: 0.80, wT: 0.55, yB: 0.84, yS: 1.05, yT: 1.36 }, // base pare-brise
-  { x:  0.10, wB: 0.80, wS: 0.83, wT: 0.60, yB: 0.85, yS: 1.15, yT: 1.43 }, // pare-brise
-  { x: -0.45, wB: 0.81, wS: 0.84, wT: 0.62, yB: 0.86, yS: 1.20, yT: 1.465 }, // toit
-  { x: -1.00, wB: 0.80, wS: 0.82, wT: 0.58, yB: 0.86, yS: 1.15, yT: 1.40 }, // toit AR
-  { x: -1.50, wB: 0.76, wS: 0.78, wT: 0.50, yB: 0.85, yS: 1.05, yT: 1.22 }, // lunette AR
-  { x: -1.85, wB: 0.66, wS: 0.68, wT: 0.38, yB: 0.84, yS: 0.98, yT: 1.05 }, // fin de lunette
+  { x:  0.55, wB: 0.76, wS: 0.78, wT: 0.52, yB: 0.83, yS: 1.02, yT: 1.32 }, // base pare-brise
+  { x:  0.10, wB: 0.79, wS: 0.82, wT: 0.58, yB: 0.84, yS: 1.12, yT: 1.40 }, // pare-brise
+  { x: -0.45, wB: 0.80, wS: 0.83, wT: 0.60, yB: 0.85, yS: 1.16, yT: 1.45 }, // toit
+  { x: -1.00, wB: 0.79, wS: 0.81, wT: 0.56, yB: 0.85, yS: 1.12, yT: 1.38 }, // toit AR
+  { x: -1.50, wB: 0.75, wS: 0.77, wT: 0.48, yB: 0.84, yS: 1.02, yT: 1.18 }, // lunette AR
+  { x: -1.85, wB: 0.64, wS: 0.66, wT: 0.36, yB: 0.83, yS: 0.95, yT: 1.02 }, // fin de lunette
 ];
 function sectionVitre(s) {
   const half = [
@@ -246,9 +246,9 @@ scene.add(loft(STATIONS_VITRAGE, sectionVitre, vitre));
 
 // Panneau de toit peint par-dessus la verrière
 const STATIONS_TOIT = [
-  { x:  0.35, w: 0.84, y: 1.425 }, { x:  0.00, w: 0.845, y: 1.45 },
-  { x: -0.45, w: 0.85, y: 1.475 }, { x: -1.00, w: 0.845, y: 1.41 },
-  { x: -1.50, w: 0.80, y: 1.24 }, { x: -1.62, w: 0.74, y: 1.16 },
+  { x:  0.35, w: 0.82, y: 1.385 }, { x:  0.00, w: 0.83, y: 1.41 },
+  { x: -0.45, w: 0.835, y: 1.46 }, { x: -1.00, w: 0.825, y: 1.39 },
+  { x: -1.50, w: 0.78, y: 1.20 }, { x: -1.62, w: 0.72, y: 1.13 },
 ];
 function sectionToit(s) {
   return [
@@ -263,12 +263,16 @@ const voiture = new THREE.Group();
 scene.add(voiture);
 
 // --- Calandre noire brillante + emblème 3 griffes Peugeot ---
-const calandre = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.34, 1.15), noirBrillant);
-calandre.position.set(2.315, 0.56, 0);
+const calandre = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.38, 1.20), noirBrillant);
+calandre.position.set(2.315, 0.52, 0);
 voiture.add(calandre);
-const priseAir = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 1.35), noirMat);
-priseAir.position.set(2.31, 0.30, 0);
+const priseAir = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 1.40), noirMat);
+priseAir.position.set(2.31, 0.28, 0);
 voiture.add(priseAir);
+// capot de pare-brise (bande noire entre capot et vitrage)
+const cowl = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.05, 1.45), noirMat);
+cowl.position.set(0.62, 0.865, 0);
+voiture.add(cowl);
 
 function textureGriffes() {
   const c = document.createElement('canvas'); c.width = c.height = 128;
@@ -288,7 +292,7 @@ const emblem = new THREE.Mesh(
   new THREE.PlaneGeometry(0.17, 0.17),
   new THREE.MeshBasicMaterial({ map: textureGriffes(), transparent: true })
 );
-emblem.position.set(2.345, 0.60, 0);
+emblem.position.set(2.345, 0.56, 0);
 emblem.rotation.y = Math.PI / 2;
 voiture.add(emblem);
 
@@ -302,7 +306,7 @@ function phare(signe) {
     griffe.position.set(0.045, 0, i * 0.10);
     g.add(griffe);
   }
-  g.position.set(2.14, 0.80, signe * 0.66);
+  g.position.set(2.16, 0.76, signe * 0.67);
   g.rotation.y = -signe * 0.38;
   return g;
 }
@@ -318,11 +322,21 @@ function feuArriere(signe) {
     griffe.position.set(-0.03, 0, signe * 0 + i * 0.09);
     g.add(griffe);
   }
-  g.position.set(-2.30, 0.86, signe * 0.58);
+  g.position.set(-2.31, 0.84, signe * 0.60);
   g.rotation.y = signe * 0.30;
   return g;
 }
 voiture.add(feuArriere(1), feuArriere(-1));
+
+// --- Becquet de coffre (ducktail) + antenne requin ---
+const becquet = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.025, 1.30), peinture);
+becquet.position.set(-2.12, 1.045, 0);
+becquet.rotation.z = 0.06;
+voiture.add(becquet);
+const antenne = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.02), peinture);
+antenne.position.set(-1.45, 1.475, 0);
+antenne.rotation.x = -0.35;
+voiture.add(antenne);
 
 // --- Plaques d'immatriculation (texture canvas) ---
 function texturePlaque(txt) {
@@ -347,8 +361,8 @@ function plaque(txt, x, y, ry) {
   m.position.set(x, y, 0); m.rotation.y = ry;
   voiture.add(m);
 }
-plaque('AB-408-PEUGEOT', 2.345, 0.40, Math.PI / 2);
-plaque('AB-408-PEUGEOT', -2.35, 0.48, -Math.PI / 2);
+plaque('AB-408-PEUGEOT', 2.35, 0.38, Math.PI / 2);
+plaque('AB-408-PEUGEOT', -2.35, 0.45, -Math.PI / 2);
 
 // --- Badge « 408 » sur le coffre ---
 function textureBadge() {
@@ -365,7 +379,7 @@ const badge = new THREE.Mesh(
   new THREE.PlaneGeometry(0.24, 0.075),
   new THREE.MeshBasicMaterial({ map: textureBadge(), transparent: true })
 );
-badge.position.set(-2.335, 0.90, 0);
+badge.position.set(-2.335, 0.88, 0);
 badge.rotation.y = -Math.PI / 2;
 voiture.add(badge);
 
@@ -376,7 +390,7 @@ function retro(signe) {
   const glace = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, 0.09), vitre);
   glace.position.x = -0.09;
   g.add(coque, glace);
-  g.position.set(0.60, 0.97, signe * 0.95);
+  g.position.set(0.60, 0.95, signe * 0.96);
   return g;
 }
 voiture.add(retro(1), retro(-1));
@@ -384,19 +398,19 @@ voiture.add(retro(1), retro(-1));
 // --- Poignées de portes chromées ---
 for (const [x, signe] of [[0.30, 1], [0.30, -1], [-0.85, 1], [-0.85, -1]]) {
   const p = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.022, 0.035), chrome);
-  p.position.set(x, 0.875, signe * 0.905);
+  p.position.set(x, 0.86, signe * 0.91);
   voiture.add(p);
 }
 
 // --- Sortie d'échappement chromée ---
 const echappement = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.14, 24), chrome);
 echappement.rotation.z = Math.PI / 2;
-echappement.position.set(-2.28, 0.22, -0.35);
+echappement.position.set(-2.30, 0.20, -0.35);
 voiture.add(echappement);
 
 // --- Fond de caisse (évite de voir à travers sous la voiture) ---
 const dessous = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.12, 1.55), noirMat);
-dessous.position.y = 0.17;
+dessous.position.y = 0.15;
 voiture.add(dessous);
 
 /* ================= 9. ROUES (pneu + jante à bâtons + frein) ================= */
@@ -433,14 +447,14 @@ function roue() {
   g.add(capuchon);
   return g;
 }
-const RAYON_ROUE = 0.335, DEMI_EMPATTEMENT = 1.3935, VOIE = 0.80;
+const RAYON_ROUE = 0.345, DEMI_EMPATTEMENT = 1.3935, VOIE = 0.84;
 for (const x of [-DEMI_EMPATTEMENT, DEMI_EMPATTEMENT]) {
   for (const z of [-VOIE, VOIE]) {
     const r = roue();
     r.position.set(x, RAYON_ROUE, z);
     voiture.add(r);
     // Enjoliveur d'arche de roue
-    const arche = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.028, 10, 28, Math.PI), noirMat);
+    const arche = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.028, 10, 28, Math.PI), noirMat);
     arche.position.set(x, RAYON_ROUE, z + (z > 0 ? 0.115 : -0.115));
     voiture.add(arche);
   }
