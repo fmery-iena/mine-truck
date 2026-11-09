@@ -24,6 +24,15 @@ Three.js est chargé via CDN : il faut juste une connexion internet.
 - Si tu sors de la piste, l'herbe **ralentit** le pickup — reviens sur l'asphalte !
 - Décor : **vaches 🐄**, arbres et maisons dans la prairie, ferme en bas du volcan.
 
+## 🚗 Showroom Peugeot 408 (`peugeot.html`)
+
+Ouvre `peugeot.html` dans un navigateur (ou en ligne via GitHub Pages :
+`https://fmery-iena.github.io/mine-truck/peugeot.html`) : une **Peugeot 408 2025 Allure Pack noire**,
+modélisée en 3D détaillée (Three.js), pivote lentement sur elle-même façon Gran Turismo,
+sur fond noir avec éclairage zénithal et sol miroir.
+- **Souris** : glisser = pivoter, molette = zoomer
+- **Tactile** : un doigt = pivoter, pincement = zoomer
+
 ## 🛠️ Modifier le jeu
 
 Tout le code est dans `index.html`, découpé en sections commentées :
