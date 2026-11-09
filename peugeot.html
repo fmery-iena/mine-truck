@@ -423,6 +423,7 @@ function roue() {
     new THREE.Vector2(0.295, 0.10), new THREE.Vector2(0.20, 0.105),
   ];
   const pneu = new THREE.Mesh(new THREE.LatheGeometry(profil, 40), pneuMat);
+  pneu.rotation.x = Math.PI / 2; // axe du lathe (Y) -> axe de roue (Z, largeur de la voiture)
   g.add(pneu);
   // Disque de frein + étrier
   const disque = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.03, 32), disqueFrein);
@@ -452,6 +453,7 @@ for (const x of [-DEMI_EMPATTEMENT, DEMI_EMPATTEMENT]) {
   for (const z of [-VOIE, VOIE]) {
     const r = roue();
     r.position.set(x, RAYON_ROUE, z);
+    if (z < 0) r.rotation.y = Math.PI; // bâtons de jante vers l'extérieur des deux côtés
     voiture.add(r);
     // Enjoliveur d'arche de roue
     const arche = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.028, 10, 28, Math.PI), noirMat);
