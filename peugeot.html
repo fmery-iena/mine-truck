@@ -171,19 +171,20 @@ const STATIONS_CAISSE = [
   { x:  2.345, wB: 0.001, wS: 0.001, wT: 0.001, yB: 0.55, yS: 0.55, yT: 0.55 }, // pointe AV
 ];
 
-// Section transversale (y, z) d'une station de caisse
+// Section transversale (y, z) d'une station de caisse.
+// IMPORTANT : toujours le même nombre de points, même si le pavillon est
+// ouvert (les points du haut sont alors posés sur la ligne de ceinture),
+// sinon le loft mélange les sommets des stations entre elles.
 function sectionCaisse(s) {
+  const ouvert = s.yT <= s.yS + 0.02; // pavillon ouvert : la verrière recouvre
+  const yT = ouvert ? s.yS : s.yT;
   const half = [
     [s.yB, 0], [s.yB, s.wB * 0.75], [s.yB + 0.03, s.wB],
     [s.yS - 0.12, s.wS * 0.995], [s.yS, s.wS],
+    [s.yS + (yT - s.yS) * 0.45, s.wT + 0.03],
+    [s.yS + (yT - s.yS) * 0.75, s.wT * 0.9],
+    [ouvert ? s.yS - 0.04 : yT, 0],
   ];
-  if (s.yT > s.yS + 0.02) {
-    half.push([s.yS + (s.yT - s.yS) * 0.45, s.wT + 0.03]);
-    half.push([s.yS + (s.yT - s.yS) * 0.75, s.wT * 0.9]);
-    half.push([s.yT, 0]);
-  } else {
-    half.push([s.yS - 0.04, 0]); // pavillon ouvert : la verrière recouvre
-  }
   const pts = half.slice();
   for (let i = half.length - 2; i >= 1; i--) pts.push([half[i][0], -half[i][1]]);
   return pts;
@@ -193,6 +194,9 @@ function sectionCaisse(s) {
 function loft(stations, sectionFn, materiau) {
   const sections = stations.map(sectionFn);
   const n = sections[0].length;
+  for (const sec of sections) {
+    if (sec.length !== n) throw new Error('loft : toutes les sections doivent avoir le même nombre de points');
+  }
   const pos = [];
   for (const sec of sections) for (const [y, z] of sec) pos.push(0, y, z); // x rempli après
   const idx = [];
